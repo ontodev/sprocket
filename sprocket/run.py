@@ -66,15 +66,42 @@ def get_table(table):
     fmt = request.args.get("format", "tsv")
     if fmt not in ["tsv", "csv"]:
         return abort(422, f"'format' must be 'tsv' or 'csv', not '{fmt}'")
+    select = request.args.get("select")
+    if select:
+        select_cols = select.split(",")
+        table_cols = get_sql_columns(table)
+        invalid_cols = list(set(select_cols) - set(table_cols))
+        if invalid_cols:
+            return abort(
+                422,
+                f"The following column(s) do not exist in '{table}' table: "
+                + ", ".join(invalid_cols),
+            )
+        select = ", ".join(select_cols)
+    else:
+        select = "*"
     # We can't use parameters for these values, but we've already validated that table exists
     # and that limit is an integer, so this query should be safe
-    results = CONN.execute(f"SELECT * FROM {table} LIMIT {limit}")
+    results = CONN.execute(f"SELECT {select} FROM {table} LIMIT {limit}")
     headers = results.keys()
     output = StringIO()
     writer = csv.writer(output, delimiter="\t", lineterminator="\n")
     writer.writerow(list(headers))
     writer.writerows(list(results))
     return Response(output.getvalue(), mimetype="text/tab-separated-values")
+
+
+def get_sql_columns(table):
+    """Get a list of columns from a table."""
+    # Check for required columns
+    if str(CONN.engine.url).startswith("sqlite"):
+        res = CONN.execute(f"PRAGMA table_info({table})")
+    else:
+        res = CONN.execute(
+            f"""SELECT column_name AS name, data_type AS type FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_NAME = '{table}';"""
+        )
+    return {x["name"]: x["type"] for x in res}
 
 
 def get_sql_tables():
@@ -92,5 +119,5 @@ def main():
     app.run()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

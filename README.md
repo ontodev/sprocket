@@ -26,5 +26,6 @@ This will start the server on `localhost:5000`.
 When provided with a table name (which must exist in the database), sending a GET request to this path will return the first 100 results from that table in TSV format.
 
 Optional query parameters:
-* `limit`: Return a different number of results, must be an integer
 * `format`: Export the results in given format, must be either `tsv` (default) or `csv`
+* `limit`: Return a different number of results, must be an integer
+* `select`: A comma-separated list of columns to include in results (no spaces)
