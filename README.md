@@ -21,7 +21,7 @@ This will start the server on `localhost:5000`.
 
 ## Paths
 
-### /<table>
+### /\<table\>
 
 When provided with a table name (which must exist in the database), sending a GET request to this path will return the first 100 results from that table in TSV format.
 
