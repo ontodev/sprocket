@@ -29,6 +29,7 @@ Optional query parameters:
 * `format`: Export the results in given format, must be either `tsv` (default) or `csv`
 * `limit`: Return a different number of results, must be an integer
 * `offset`: Return results starting after given integer (e.g., `offset=5` will return results starting with the 6th result)
+* `order`: See [ORDER BY Clauses](#order-by-clauses)
 * `select`: A comma-separated list of columns to include in results (no spaces)
 
 #### WHERE Clauses
@@ -70,4 +71,24 @@ The `in` condition accepts a list as a constraint, which is a comma-separated li
 You can negate an operator by including the `not` operator:
 ```
 /<table>?subject=not.in.(foo,bar,baz)
+```
+
+#### ORDER BY Clauses
+
+You can use the `order` query parameter to define one or more columns to sort on. By default, this is ascending. Multiple values should be comma-separated, no whitespace.
+```
+/<table>?order=subject
+/<table>?order=subject,object
+```
+
+You can include `asc` or `desc` keywords to specify ascending or descending results:
+```
+/<table>?order=subject.desc
+/<table>?order=subject.desc,object.desc
+```
+
+Finally, you can specify if you wish to display `nullsfirst` or `nullslast`. These should always be the last keyword.
+```
+/<table>?order=subject.desc.nullsfirst
+/<table>?order=subject.nullsfirst
 ```

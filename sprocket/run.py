@@ -105,8 +105,15 @@ def get_table(table):
             continue
         where_statements.append(get_where(where, tc))
 
+    order_by = []
+    order = request.args.get("order")
+    if order:
+        order_by = get_order_by(order)
+
     # Build & execute the query
-    results = exec_query(table, select, where_statements=where_statements, limit=limit)
+    results = exec_query(
+        table, select, where_statements=where_statements, order_by=order_by, limit=limit
+    )
     headers = results.keys()
     output = StringIO()
     sep = "\t"
@@ -120,7 +127,7 @@ def get_table(table):
     return Response(output.getvalue(), mimetype=mt)
 
 
-def exec_query(table, select, where_statements=None, limit=100):
+def exec_query(table, select, where_statements=None, order_by=None, limit=100):
     """Create a query from, minimally, a table name and a select statement."""
     query = f"SELECT {select} FROM {table}"
     const_dict = {}
@@ -138,6 +145,8 @@ def exec_query(table, select, where_statements=None, limit=100):
             expanded_statements.append(ws)
             n += 1
         query += " WHERE " + " AND ".join(expanded_statements)
+    if order_by:
+        query += " ORDER BY " + ", ".join(order_by)
     if limit > 0:
         query += f" LIMIT {limit}"
     query = sql_text(query)
@@ -147,6 +156,47 @@ def exec_query(table, select, where_statements=None, limit=100):
         else:
             query = query.bindparams(bindparam(k))
     return CONN.execute(query, const_dict)
+
+
+def get_order_by(order):
+    """Create a list of ORDER BY statements from the order query param."""
+    order_by = []
+    for itm in order.split(","):
+        attrs = itm.split(".")
+        if len(attrs) == 1:
+            order_by.append(attrs[0])
+        elif len(attrs) == 2:
+            if attrs[1] == "nullsfirst":
+                order_by.append(f"{attrs[0]} NULLS FIRST")
+            elif attrs[1] == "nullslast":
+                order_by.append(f"{attrs[0]} NULLS LAST")
+            elif attrs[1] == "asc":
+                order_by.append(attrs[0])
+            elif attrs[1] == "desc":
+                order_by.append(f"{attrs[0]} DESC")
+            else:
+                return abort(422, "Unknown order qualifier: " + attrs[1])
+        elif len(attrs) == 3:
+            o = ""
+            if attrs[1] == "desc":
+                o = " DESC "
+            elif attrs[1] != "asc":
+                return abort(
+                    422,
+                    "Second 'order' modifier must be either 'asc' or 'desc', not " + attrs[1],
+                )
+            if attrs[2] == "nullsfirst":
+                n = "FIRST"
+            elif attrs[2] == "nullslast":
+                n = "LAST"
+            else:
+                return abort(
+                    422,
+                    "Third 'order' modifier must be either 'nullsfirst' or 'nullslast', not "
+                    + attrs[2],
+                )
+            order_by.append(f"{attrs[0]}{o} NULLS {n}")
+    return order_by
 
 
 def get_sql_columns(table):
