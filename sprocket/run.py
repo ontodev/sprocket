@@ -3,8 +3,11 @@ import os
 
 from configparser import ConfigParser
 from flask import abort, Flask, request, Response
+from grammar import PARSER, SprocketTransformer
 from io import StringIO
 from sqlalchemy import create_engine
+from sqlalchemy.sql.expression import bindparam
+from sqlalchemy.sql.expression import text as sql_text
 
 
 app = Flask(__name__)
@@ -56,20 +59,26 @@ else:
 
 @app.route("/<table>", methods=["GET"])
 def get_table(table):
-    limit = request.args.get("limit", "100")
-    try:
-        limit = int(limit)
-    except ValueError:
-        return abort(422, "'limit' must be an integer")
     if table not in get_sql_tables():
         return abort(422, f"'{table}' is not a valid table in the database")
+    table_cols = get_sql_columns(table)
+
+    limit = request.args.get("limit", "100")
+    if limit.lower() == "none":
+        limit = -1
+    else:
+        try:
+            limit = int(limit)
+        except ValueError:
+            return abort(422, "'limit' must be an integer or 'none'")
+
     fmt = request.args.get("format", "tsv")
     if fmt not in ["tsv", "csv"]:
         return abort(422, f"'format' must be 'tsv' or 'csv', not '{fmt}'")
+
     select = request.args.get("select")
     if select:
         select_cols = select.split(",")
-        table_cols = get_sql_columns(table)
         invalid_cols = list(set(select_cols) - set(table_cols))
         if invalid_cols:
             return abort(
@@ -80,15 +89,56 @@ def get_table(table):
         select = ", ".join(select_cols)
     else:
         select = "*"
-    # We can't use parameters for these values, but we've already validated that table exists
-    # and that limit is an integer, so this query should be safe
-    results = CONN.execute(f"SELECT {select} FROM {table} LIMIT {limit}")
+
+    where_statements = []
+    for tc in table_cols:
+        where = request.args.get(tc)
+        if not where:
+            continue
+        where_statements.append(get_where(where, tc))
+
+    # Build & execute the query
+    results = exec_query(table, select, where_statements=where_statements, limit=limit)
     headers = results.keys()
     output = StringIO()
-    writer = csv.writer(output, delimiter="\t", lineterminator="\n")
+    sep = "\t"
+    mt = "text/tab-separated-values"
+    if fmt == "csv":
+        sep = ","
+        mt = "text/comma-separated-values"
+    writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
     writer.writerows(list(results))
-    return Response(output.getvalue(), mimetype="text/tab-separated-values")
+    return Response(output.getvalue(), mimetype=mt)
+
+
+def exec_query(table, select, where_statements=None, limit=100):
+    """Create a query from, minimally, a table name and a select statement."""
+    query = f"SELECT {select} FROM {table}"
+    const_dict = {}
+    # Add keys for any where statements using user input values
+    if where_statements:
+        n = 0
+        expanded_statements = []
+        for ws, constraint in where_statements:
+            if not constraint:
+                expanded_statements.append(ws)
+                continue
+            k = f"const{n}"
+            ws += f" :{k}"
+            const_dict[k] = constraint
+            expanded_statements.append(ws)
+            n += 1
+        query += " WHERE " + " AND ".join(expanded_statements)
+    if limit > 0:
+        query += f" LIMIT {limit}"
+    query = sql_text(query)
+    for k, v in const_dict.items():
+        if isinstance(v, list):
+            query = query.bindparams(bindparam(k, expanding=True))
+        else:
+            query = query.bindparams(bindparam(k))
+    return CONN.execute(query, const_dict)
 
 
 def get_sql_columns(table):
@@ -113,6 +163,57 @@ def get_sql_tables():
             "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public'"
         )
     return [x["name"] for x in res]
+
+
+def get_where(where, column):
+    """Create a where clause by parsing the horizontal filtering condition."""
+    # Parse using Lark grammar
+    parsed = PARSER.parse(where)
+    res = SprocketTransformer().transform(parsed)
+    if len(res) == 3:
+        # NOT operator included
+        operator = res[1]
+        constraint = res[2]
+        statement = "NOT "
+    else:
+        operator = res[0]
+        constraint = res[1]
+        statement = ""
+
+    # Some basic validation
+    if operator != "in" and isinstance(constraint, list):
+        return abort(422, f"The constraint for '{operator}' must be a single value, not a list")
+    elif operator == "in" and not isinstance(constraint, list):
+        return abort(422, "The constraint for 'in' must be a list")
+
+    # Set the SQL operator
+    if operator == "eq":
+        query_op = "="
+    elif operator == "gt":
+        query_op = ">"
+    elif operator == "gte":
+        query_op = ">="
+    elif operator == "lt":
+        query_op = "<"
+    elif operator == "lte":
+        query_op = "<="
+    elif operator == "neq":
+        query_op = "!="
+    elif operator == "is":
+        if constraint.lower() == "true":
+            query_op = "IS TRUE"
+            constraint = None
+        elif constraint.lower() == "false":
+            query_op = "IS FALSE"
+            constraint = None
+        elif constraint.lower() == "null":
+            query_op = "IS NULL"
+            constraint = None
+        else:
+            query_op = "IS"
+    else:
+        query_op = operator.upper()
+    return statement + f"{column} {query_op}", constraint
 
 
 def main():

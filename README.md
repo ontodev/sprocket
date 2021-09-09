@@ -29,3 +29,44 @@ Optional query parameters:
 * `format`: Export the results in given format, must be either `tsv` (default) or `csv`
 * `limit`: Return a different number of results, must be an integer
 * `select`: A comma-separated list of columns to include in results (no spaces)
+
+#### WHERE Clauses
+
+You can also include the names of columns as optional query parameters where the value is one of the [hortizontal filtering](https://postgrest.org/en/v8.0/api.html#horizontal-filtering-rows) conditions. The general pattern is `<table>?<column>=<operator>.<constraint>`.
+
+The following operators are currently supported:
+
+| Operator | Meaning                         |
+| -------- | ------------------------------- |
+| eq       | equals                          |
+| gt       | greater than                    |
+| gte      | greater than or equal           |
+| lt       | less than                       |
+| lte      | less than or equal              |
+| neq      | not equal                       |
+| like     | SQL LIKE (use * in place of %)  |
+| ilike    | case insensitive LIKE           |
+| is       | exact equal (true, false, null) |
+| in       | one of list values              |
+
+For example, to restrict the `subject` column to values equal to the string "foo":
+```
+/<table>?subject=eq.foo
+```
+
+If the constraint of the condition contains a comma or parentheses, it must be enclosed in double quotes. Strings with whitespace do not need to be enclosed, but you can if you prefer.
+```
+/<table>?subject=eq."foo (bar)"
+/<table>?subject=eq."foo, bar, baz"
+/<table>?subject=eq.foo bar
+```
+
+The `in` condition accepts a list as a constraint, which is a comma-separated list (NO whitespace, unless the constraint contains whitespace) of values enclosed in parentheses:
+```
+/<table>?subject=in.(foo,bar,baz)
+```
+
+You can negate an operator by including the `not` operator:
+```
+/<table>?subject=not.in.(foo,bar,baz)
+```
