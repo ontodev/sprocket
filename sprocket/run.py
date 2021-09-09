@@ -72,6 +72,14 @@ def get_table(table):
         except ValueError:
             return abort(422, "'limit' must be an integer or 'none'")
 
+    offset = request.args.get("offset", "0")
+    try:
+        offset = int(offset)
+    except ValueError:
+        return abort(422, "'offset' must be an integer")
+
+    limit = limit + offset
+
     fmt = request.args.get("format", "tsv")
     if fmt not in ["tsv", "csv"]:
         return abort(422, f"'format' must be 'tsv' or 'csv', not '{fmt}'")
@@ -108,7 +116,7 @@ def get_table(table):
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results))
+    writer.writerows(list(results)[offset:])
     return Response(output.getvalue(), mimetype=mt)
 
 

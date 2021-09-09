@@ -28,6 +28,7 @@ When provided with a table name (which must exist in the database), sending a GE
 Optional query parameters:
 * `format`: Export the results in given format, must be either `tsv` (default) or `csv`
 * `limit`: Return a different number of results, must be an integer
+* `offset`: Return results starting after given integer (e.g., `offset=5` will return results starting with the 6th result)
 * `select`: A comma-separated list of columns to include in results (no spaces)
 
 #### WHERE Clauses
