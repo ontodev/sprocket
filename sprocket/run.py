@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
 
-
+BOOTSTRAP_CSS = "https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css"
 app = Flask(__name__)
 
 DB = os.environ.get("SPROCKET_DB")
@@ -80,9 +80,9 @@ def get_table(table):
 
     limit = limit + offset
 
-    fmt = request.args.get("format", "tsv")
-    if fmt not in ["tsv", "csv"]:
-        return abort(422, f"'format' must be 'tsv' or 'csv', not '{fmt}'")
+    fmt = request.args.get("format", "html")
+    if fmt not in ["tsv", "csv", "html"]:
+        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
 
     select = request.args.get("select")
     if select:
@@ -114,6 +114,10 @@ def get_table(table):
     results = exec_query(
         table, select, where_statements=where_statements, order_by=order_by, limit=limit
     )
+
+    # Return results based on format
+    if fmt == "html":
+        return render_html(results, table, request.args)
     headers = results.keys()
     output = StringIO()
     sep = "\t"
@@ -182,8 +186,7 @@ def get_order_by(order):
                 o = " DESC "
             elif attrs[1] != "asc":
                 return abort(
-                    422,
-                    "Second 'order' modifier must be either 'asc' or 'desc', not " + attrs[1],
+                    422, "Second 'order' modifier must be either 'asc' or 'desc', not " + attrs[1],
                 )
             if attrs[2] == "nullsfirst":
                 n = "FIRST"
@@ -272,6 +275,112 @@ def get_where(where, column):
     else:
         query_op = operator.upper()
     return statement + f"{column} {query_op}", constraint
+
+
+def render_html(results, table, args):
+    """Render the results as an HTML table."""
+    headers = list(results.keys())
+    results = list(results)
+    head = ["<html>", "<head>", f'<link href="{BOOTSTRAP_CSS}" rel="stylesheet">', "</head>"]
+    body = ["<body>"]
+    # TODO: build query parameters
+    #       - select columns (need to know all cols)
+    #       - sorting (order by, asc or desc)
+    #       - where clauses on columns
+
+    # Select number of results per page
+    body.extend(
+        [
+            '<div class="row" style="margin-top:10px;">',
+            '<form method="get">',
+            '<div class="row g-3 float-end">',
+            '<div class="col-auto">',
+            '<label for="limit" class="col-form-label">Results per page</label>',
+            "</div>",
+            '<div class="col-auto">',
+            '<select class="form-select" name="limit">',
+        ]
+    )
+    limit_vals = [10, 50, 100, 500]
+    limit = int(args.get("limit", "100"))
+    if limit not in limit_vals:
+        limit_vals.append(limit)
+    limit_vals = sorted(limit_vals)
+    for lv in limit_vals:
+        # Make sure the 'selected' value is our current limit
+        if lv == limit:
+            body.append(f'<option value="{lv}" selected>{lv}</option>')
+        else:
+            body.append(f'<option value="{lv}">{lv}</option>')
+    body.extend(
+        [
+            "</select>",
+            "</div>" '<div class="col-auto">',
+            '<button type="submit" class="btn btn-primary">Update</button>',
+            "</div>",
+            "</div>",
+            "</form>",
+            "</div>",
+            "</div>",
+        ]
+    )
+
+    # Table headers
+    body.extend(['<table class="table">', "<thead>", "<tr>"])
+    for h in headers:
+        body.append(f"<th>{h}</th>")
+
+    # Table body
+    body.extend(["</tr>", "<tbody>"])
+    offset = int(args.get("offset", "0"))
+    for res in results[offset:]:
+        body.append("<tr>")
+        for val in res:
+            if not val:
+                body.append("<td></td>")
+            else:
+                val = val.replace("<", "&lt;").replace(">", "&gt;")
+                body.append(f"<td>{val}</td>")
+        body.append("</tr>")
+    body.extend(["</tbody>", "</table>"])
+
+    # Pagination
+    if limit > len(results):
+        limit = len(results)
+    body.extend(
+        [
+            '<div class="row" style="padding-left:10px; padding-right:10px;">',
+            '<div class="col">',
+            f'<p class="fst-italic">Showing results {offset + 1}-{limit + offset}</p>',
+            "</div>",
+            '<div class="col">',
+            '<div class="float-end">',
+        ]
+    )
+    url = "./" + table
+    if offset > 0:
+        # Only include "previous" link if we aren't at the beginning
+        prev_args = args.copy()
+        prev_offset = limit - offset
+        if prev_offset > 0:
+            prev_offset = 0
+        prev_args["offset"] = prev_offset
+        prev_query = [f"{k}={v}" for k, v in prev_args.items()]
+        prev_url = url + "?" + "&".join(prev_query)
+        body.append(f'<a href="{prev_url}">Previous</a> | ')
+    # TODO: no way to know if we have next set of results, unless we query all each time
+    #       querying with a limit is faster so this would be a performance hit
+    next_args = args.copy()
+    next_args["offset"] = limit + offset
+    next_query = [f"{k}={v}" for k, v in next_args.items()]
+    next_url = url + "?" + "&".join(next_query)
+    body.append(f'<a href="{next_url}">Next</a>')
+    body.extend(["</div>", "</div>", "</div>"])
+
+    # Close body
+    body.extend(["</div>", "</body>", "</html>"])
+    html = head + body
+    return "\n".join(html)
 
 
 def main():
