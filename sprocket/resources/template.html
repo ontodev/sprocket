@@ -16,23 +16,50 @@
 					</button>
 				</h2>
 				<div id="collapseOptions" class="accordion-collapse collapse show" data-bs-parent="#accordionOptions">
-					<div class="accordion-body" style="padding-bottom:110px;">
+					<div class="accordion-body">
 						<form method="get">
-							<div class="row g-3 float-end">
-								<div class="col-auto">
+							<div class="row g-3">
+								<div class="col-md-6" style="padding-right:30px;">
+									{% for h in headers %}
 									<div class="row">
-										<div style="height:100px; width:200px; border: 1px solid #ced4da; border-radius: .25rem; overflow: auto;">
-											{% for s in select %}
-											<div class="form-check">
-												{% if s in headers %}
-												<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}">
-												{% endif %}
-												<label class="form-check-label" for="{{ s }}">{{ s }}</label>
-											</div>
-											{% endfor %}
+										<div class="col-sm-2 col-form-label">
+											<label>{{ h }}</label>
 										</div>
+										<div class="col-sm-4">
+											<select class="form-select" id="{{ h }}Operator" name="operator">
+												<option selected></option>
+												<option value="eq">equals</option>
+												<option value="gt">greater than</option>
+												<option value="gte">greater than or equals</option>
+												<option value="lt">less than</option>
+												<option value="lte">less than or equals</option>
+												<option value="neq">not equals</option>
+												<option value="like">like</option>
+												<option value="ilike">like (insensitive)</option>
+												<option value="is">is</option>
+												<option value="not.is">is not</option>
+												<option value="in">in</option>
+												<option value="not.in">not in</option>
+											</select>
+										</div>
+										<div class="col-sm-6">
+											<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text">
+										</div>
+									</div>
+									{% endfor %}
+								</div>
+								<div class="col-md-2">
+									<div class="row">
+										{% for s in select %}
+										<div class="form-check">
+											{% if s in headers %}
+											<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}" checked>
+											{% else %}
+											<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}">
+											{% endif %}
+											<label class="form-check-label" for="{{ s }}">{{ s }}</label>
+										</div>
+										{% endfor %}
 									</div>
 									<input type="hidden" id="select" name="select" value="">
 								</div>
@@ -48,6 +75,9 @@
 										</div>
 									</div>
 									<div class="row float-end" style="padding-top:20px;">
+										<div class="col-auto">
+											<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
+										</div>
 										<div class="col-auto">
 											<input type="button" onclick="submitForm();" class="btn btn-primary" value="Update">
 										</div>
@@ -112,6 +142,17 @@
 	</div>
 
 	<script>
+		// Init headers
+		var headers = [];
+		{% for h in headers %}
+		headers.push('{{ h }}');
+		{% endfor %}
+
+		function reset() {
+			var url = window.location.href.split('?')[0];
+			window.location.href = url;
+		}
+
 		function sort(col, desc) {
 			// Get current parameters
 			var qString = window.location.search;
@@ -145,6 +186,15 @@
 
 		function submitForm() {
 			var args = []
+			// Get the where options
+			for (var h of headers) {
+				var operator = document.getElementById(h + 'Operator').value;
+				var constraint = document.getElementById(h + 'Constraint').value;
+				if (operator && constraint) {
+					args.push(h + "=" + operator + "." + constraint);
+				}
+			}
+
 			// Get the select options
 			var n = document.getElementsByName('select[]');
 			var s = [];
