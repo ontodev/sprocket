@@ -1,15 +1,18 @@
 import csv
 import os
 
+from copy import deepcopy
 from configparser import ConfigParser
 from flask import abort, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
-from .grammar import PARSER, SprocketTransformer
+from grammar import PARSER, SprocketTransformer
 
-app = Flask(__name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources")))
+app = Flask(
+    __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
+)
 
 DB = os.environ.get("SPROCKET_DB")
 if not DB:
@@ -54,6 +57,21 @@ else:
     raise ValueError(
         "Either a database file or a config file must be specified with a .db or .ini extension"
     )
+
+FILTER_OPTS = {
+    "eq": {"label": "equals"},
+    "gt": {"label": "greater than"},
+    "gte": {"label": "greater than or equals"},
+    "lt": {"label": "less than"},
+    "lte": {"label": "less than or equals"},
+    "neq": {"label": "not equals"},
+    "like": {"label": "like"},
+    "ilike": {"label": "like (insensitive)"},
+    "is": {"label": "is"},
+    "not.is": {"label": "is not"},
+    "in": {"label": "in"},
+    "not.in": {"label": "not in"},
+}
 
 
 @app.route("/<table>", methods=["GET"])
@@ -278,11 +296,7 @@ def get_where(where, column):
 
 def render_html(results, table, columns, args):
     """Render the results as an HTML table."""
-    # TODO: build query parameters
-    #       - select columns (need to know all cols)
-    #       - sorting (order by, asc or desc)
-    #       - where clauses on columns
-    headers = list(results.keys())
+    header_names = list(results.keys())
     results = list(results)
     offset = int(args.get("offset", "0"))
     limit = int(args.get("limit", "100"))
@@ -301,6 +315,19 @@ def render_html(results, table, columns, args):
             options.append(f'<option value="{lv}" selected>{lv}</option>')
         else:
             options.append(f'<option value="{lv}">{lv}</option>')
+
+    # Set the options for filtering
+    headers = {}
+    for h in header_names:
+        fltr = args.get(h)
+        if not fltr:
+            headers[h] = {"options": FILTER_OPTS, "has_selected": False}
+            continue
+        cur_options = deepcopy(FILTER_OPTS)
+        opt = fltr.rsplit(".", 1)[0]
+        val = fltr.rsplit(".", 1)[1]
+        cur_options[opt]["selected"] = True
+        headers[h] = {"options": cur_options, "const": val}
 
     # Get URLs for "previous" and "next" links
     url = "./" + table
@@ -321,7 +348,21 @@ def render_html(results, table, columns, args):
     next_query = [f"{k}={v}" for k, v in next_args.items()]
     next_url = url + "?" + "&".join(next_query)
 
-    return render_template("template.html", select=columns, options=options, headers=headers, rows=results[offset:], offset=offset, limit=limit, prev_url=prev_url, next_url=next_url)
+    # Current URL is used for download links
+    this_url = url + "?" + "&".join([f"{k}={v}" for k, v in args.items()])
+
+    return render_template(
+        "template.html",
+        select=columns,
+        options=options,
+        headers=headers,
+        rows=results[offset:],
+        offset=offset,
+        limit=limit,
+        this_url=this_url,
+        prev_url=prev_url,
+        next_url=next_url,
+    )
 
 
 def main():
