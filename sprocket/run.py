@@ -1,16 +1,18 @@
 import csv
 import os
 
+from copy import deepcopy
 from configparser import ConfigParser
-from flask import abort, Flask, request, Response
-from grammar import PARSER, SprocketTransformer
+from flask import abort, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
+from grammar import PARSER, SprocketTransformer
 
-
-app = Flask(__name__)
+app = Flask(
+    __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
+)
 
 DB = os.environ.get("SPROCKET_DB")
 if not DB:
@@ -56,6 +58,21 @@ else:
         "Either a database file or a config file must be specified with a .db or .ini extension"
     )
 
+FILTER_OPTS = {
+    "eq": {"label": "equals"},
+    "gt": {"label": "greater than"},
+    "gte": {"label": "greater than or equals"},
+    "lt": {"label": "less than"},
+    "lte": {"label": "less than or equals"},
+    "neq": {"label": "not equals"},
+    "like": {"label": "like"},
+    "ilike": {"label": "like (insensitive)"},
+    "is": {"label": "is"},
+    "not.is": {"label": "is not"},
+    "in": {"label": "in"},
+    "not.in": {"label": "not in"},
+}
+
 
 @app.route("/<table>", methods=["GET"])
 def get_table(table):
@@ -80,9 +97,9 @@ def get_table(table):
 
     limit = limit + offset
 
-    fmt = request.args.get("format", "tsv")
-    if fmt not in ["tsv", "csv"]:
-        return abort(422, f"'format' must be 'tsv' or 'csv', not '{fmt}'")
+    fmt = request.args.get("format", "html")
+    if fmt not in ["tsv", "csv", "html"]:
+        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
 
     select = request.args.get("select")
     if select:
@@ -114,6 +131,10 @@ def get_table(table):
     results = exec_query(
         table, select, where_statements=where_statements, order_by=order_by, limit=limit
     )
+
+    # Return results based on format
+    if fmt == "html":
+        return render_html(results, table, table_cols, request.args)
     headers = results.keys()
     output = StringIO()
     sep = "\t"
@@ -182,8 +203,7 @@ def get_order_by(order):
                 o = " DESC "
             elif attrs[1] != "asc":
                 return abort(
-                    422,
-                    "Second 'order' modifier must be either 'asc' or 'desc', not " + attrs[1],
+                    422, "Second 'order' modifier must be either 'asc' or 'desc', not " + attrs[1],
                 )
             if attrs[2] == "nullsfirst":
                 n = "FIRST"
@@ -272,6 +292,77 @@ def get_where(where, column):
     else:
         query_op = operator.upper()
     return statement + f"{column} {query_op}", constraint
+
+
+def render_html(results, table, columns, args):
+    """Render the results as an HTML table."""
+    header_names = list(results.keys())
+    results = list(results)
+    offset = int(args.get("offset", "0"))
+    limit = int(args.get("limit", "100"))
+    if limit > len(results):
+        limit = len(results)
+
+    # Set the options for the "results per page" drop down
+    options = []
+    limit_vals = [10, 50, 100, 500]
+    if limit not in limit_vals:
+        limit_vals.append(limit)
+    limit_vals = sorted(limit_vals)
+    for lv in limit_vals:
+        # Make sure the 'selected' value is our current limit
+        if lv == limit:
+            options.append(f'<option value="{lv}" selected>{lv}</option>')
+        else:
+            options.append(f'<option value="{lv}">{lv}</option>')
+
+    # Set the options for filtering
+    headers = {}
+    for h in header_names:
+        fltr = args.get(h)
+        if not fltr:
+            headers[h] = {"options": FILTER_OPTS, "has_selected": False}
+            continue
+        cur_options = deepcopy(FILTER_OPTS)
+        opt = fltr.rsplit(".", 1)[0]
+        val = fltr.rsplit(".", 1)[1]
+        cur_options[opt]["selected"] = True
+        headers[h] = {"options": cur_options, "const": val}
+
+    # Get URLs for "previous" and "next" links
+    url = "./" + table
+    prev_url = None
+    if offset > 0:
+        # Only include "previous" link if we aren't at the beginning
+        prev_args = args.copy()
+        prev_offset = limit - offset
+        if prev_offset > 0:
+            prev_offset = 0
+        prev_args["offset"] = prev_offset
+        prev_query = [f"{k}={v}" for k, v in prev_args.items()]
+        prev_url = url + "?" + "&".join(prev_query)
+    # TODO: no way to know if we have next set of results, unless we query all each time
+    #       querying with a limit is faster so this would be a performance hit
+    next_args = args.copy()
+    next_args["offset"] = limit + offset
+    next_query = [f"{k}={v}" for k, v in next_args.items()]
+    next_url = url + "?" + "&".join(next_query)
+
+    # Current URL is used for download links
+    this_url = url + "?" + "&".join([f"{k}={v}" for k, v in args.items()])
+
+    return render_template(
+        "template.html",
+        select=columns,
+        options=options,
+        headers=headers,
+        rows=results[offset:],
+        offset=offset,
+        limit=limit,
+        this_url=this_url,
+        prev_url=prev_url,
+        next_url=next_url,
+    )
 
 
 def main():

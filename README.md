@@ -23,10 +23,10 @@ This will start the server on `localhost:5000`.
 
 ### /\<table\>
 
-When provided with a table name (which must exist in the database), sending a GET request to this path will return the first 100 results from that table in TSV format.
+When provided with a table name (which must exist in the database), sending a GET request to this path will return the first 100 results from that table. By default, this is an HTML page, but you can choose to get a `tsv` or `csv` table using the `format` parameter below.
 
 Optional query parameters:
-* `format`: Export the results in given format, must be either `tsv` (default) or `csv`
+* `format`: Export the results in given format, must be `html` (default), `tsv`, or `csv`
 * `limit`: Return a different number of results, must be an integer
 * `offset`: Return results starting after given integer (e.g., `offset=5` will return results starting with the 6th result)
 * `order`: See [ORDER BY Clauses](#order-by-clauses)

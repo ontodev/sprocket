@@ -1,0 +1,229 @@
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet">
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
+
+</head>
+<body>
+	<div class="row" style="padding:10px;">
+		<div class="accordion" id="accordionOptions">
+			<div class="accordion-item">
+				<h2 class="accordion-header">
+					<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOptions">
+						<strong>Query Options</strong>
+					</button>
+				</h2>
+				<div id="collapseOptions" class="accordion-collapse collapse show" data-bs-parent="#accordionOptions">
+					<div class="accordion-body">
+						<form method="get">
+							<div class="row g-3">
+								<div class="col-md-6" style="padding-right:30px;">
+									<p class="lead">Filter results</p>
+									{% for h, details in headers.items() %}
+									<div class="row">
+										<div class="col-sm-2 col-form-label">
+											<label>{{ h }}</label>
+										</div>
+										<div class="col-sm-4">
+											<select class="form-select" id="{{ h }}Operator" name="operator">
+												{% if not details.has_selected %}
+												<option selected></option>
+												{% endif %}
+												{% for val, optdetails in details.options.items() %}
+													{% if optdetails.selected %}
+													<option value="{{ val }}" selected>{{ optdetails.label }}</option>
+													{% else %}
+													<option value="{{ val }}">{{ optdetails.label }}</option>
+													{% endif %}
+												{% endfor %}
+											</select>
+										</div>
+										<div class="col-sm-6">
+											{% if details.const %}
+											<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text" value="{{ details.const }}">
+											{% else %}
+											<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text">
+											{% endif %}
+										</div>
+									</div>
+									{% endfor %}
+								</div>
+								<div class="col-md-2">
+									<p class="lead">Show columns</p>
+									<div class="row">
+										{% for s in select %}
+										<div class="form-check">
+											{% if s in headers %}
+											<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}" checked>
+											{% else %}
+											<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}">
+											{% endif %}
+											<label class="form-check-label" for="{{ s }}">{{ s }}</label>
+										</div>
+										{% endfor %}
+									</div>
+									<input type="hidden" id="select" name="select" value="">
+								</div>
+								<div class="col-auto">
+									<div class="row">
+										<div class="col-auto">
+											<label for="limit" class="col-form-label" style="margin-left:20px;">Results per page</label>
+										</div>
+										<div class="col-auto">
+											<select class="form-select" id="limitValue" name="limit">
+												{{ options|safe }}
+											</select>
+										</div>
+									</div>
+									<div class="row float-end" style="padding-top:20px;">
+										<div class="col-auto">
+											<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
+										</div>
+										<div class="col-auto">
+											<input type="button" onclick="submitForm();" class="btn btn-primary" value="Update">
+										</div>
+									</div>
+								</div>
+							</div>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<table class="table">
+		<thead>
+			<tr>
+				{% for th in headers %}
+				<th>
+					<div class="row justify-content-between">
+						<div class="col-auto">{{ th }}</div>
+						<div class="col-auto">
+							<div class="dropdown">
+								<button class="btn btn-light dropdown-toggle" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"> </button>
+								<ul class="dropdown-menu">
+									<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
+									<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
+								</ul>
+							</div>
+						</div>
+					</div>
+				</th>
+				{% endfor %}
+			</tr>
+		</thead>
+		<tbody>
+			{% for row in rows %}
+			<tr>
+				{% for itm in row %}
+				{% if itm %}
+				<td>{{ itm }}</td>
+				{% else %}
+				<td></td>
+				{% endif %}
+				{% endfor %}
+			</tr>
+			{% endfor %}
+		</tbody>
+	</table>
+
+	<div class="row" style="padding-left:10px; padding-right:10px;">
+		<div class="col">
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }}</p>
+		</div>
+		<div class="col">
+			<div class="float-end">
+				{% if prev_url %}
+				<a href="{{ prev_url }}">Previous</a>&nbsp;|&nbsp;
+				{% endif %}
+				<a href="{{ next_url }}">Next</a>
+			</div>
+		</div>
+	</div>
+	<div class="row" style="padding-left:10px; padding-right:10px;">
+		<div class="col">
+			<p>Download results: <a href="{{ this_url }}&format=tsv">tsv</a> | <a href="{{ this_url }}&format=csv">csv</a></p>
+		</div>
+	</div>
+
+	<script>
+		// Init headers
+		var headers = [];
+		{% for h in headers %}
+		headers.push('{{ h }}');
+		{% endfor %}
+
+		function reset() {
+			var url = window.location.href.split('?')[0];
+			window.location.href = url;
+		}
+
+		function sort(col, desc) {
+			// Get current parameters
+			var qString = window.location.search;
+			var params = new URLSearchParams(qString);
+			var newParams = [];
+			var newOrder = [];
+			// Add all current params to new params, only add order keys that are not col
+			for (var entry of params.entries()) {
+				if (entry[0] !== "order") {
+					newParams.push(`${entry[0]}=${entry[1]}`);
+				} else {
+					for (var ord of entry[1].split(",")) {
+						if (!ord.startsWith(col + ".") && ord !== col) {
+							newOrder.push(ord);
+						}
+					}				
+				}
+			}
+			// Add this col to the order
+			if (desc) {
+				newOrder.push(col + ".desc");
+			} else {
+				newOrder.push(col);
+			}
+			// Redirect to new URL
+			newParams.push("order=" + newOrder.join(","));
+			if (newParams.length > 0) {
+				window.location.href = "?" + newParams.join("&");
+			}
+		}
+
+		function submitForm() {
+			var args = []
+			// Get the where options
+			for (var h of headers) {
+				var operator = document.getElementById(h + 'Operator').value;
+				var constraint = document.getElementById(h + 'Constraint').value;
+				if (operator && constraint) {
+					args.push(h + "=" + operator + "." + constraint);
+				}
+			}
+
+			// Get the select options
+			var n = document.getElementsByName('select[]');
+			var s = [];
+			for (i=0; i < (n.length); i++) {
+				if (n[i].checked) {
+					s.push(n[i].value);
+				}
+			}
+			if (s.length > 0) {
+				args.push("select=" + s.join(","));
+			}
+
+			// Get the limit option
+			var l = document.getElementById("limitValue").value;
+			args.push("limit=" + l);
+
+			// Redirect to new URL
+			if (args.length > 0) {
+				window.location.href = "?" + args.join("&")
+			}
+		}
+	</script>
+</body>
+</html>
