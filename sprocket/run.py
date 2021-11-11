@@ -1,63 +1,27 @@
 import csv
 import os
 
+from argparse import ArgumentParser
 from copy import deepcopy
 from configparser import ConfigParser
+from typing import Optional
+
 from flask import abort, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
+from sqlalchemy.engine.mock import MockConnection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
-from grammar import PARSER, SprocketTransformer
+from wsgiref.handlers import CGIHandler
+from .grammar import PARSER, SprocketTransformer
 
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
 )
+app.url_map.strict_slashes = False
 
-DB = os.environ.get("SPROCKET_DB")
-if not DB:
-    raise NameError("'SPROCKET_DB' environment variable must be set")
-if DB.endswith(".db"):
-    abspath = os.path.abspath(DB)
-    db_url = "sqlite:///" + abspath + "?check_same_thread=False"
-    engine = create_engine(db_url)
-    CONN = engine.connect()
-elif DB.endswith(".ini"):
-    config_parser = ConfigParser()
-    config_parser.read(DB)
-    if config_parser.has_section("postgresql"):
-        params = {}
-        for param in config_parser.items("postgresql"):
-            params[param[0]] = param[1]
-    else:
-        raise ValueError(
-            "Unable to create database connection; missing [postgresql] section from " + DB
-        )
-    pg_user = params.get("user")
-    if not pg_user:
-        raise ValueError(
-            "Unable to create database connection: missing 'user' parameter from " + DB
-        )
-    pg_pw = params.get("password")
-    if not pg_pw:
-        raise ValueError(
-            "Unable to create database connection: missing 'password' parameter from " + DB
-        )
-    pg_db = params.get("database")
-    if not pg_db:
-        raise ValueError(
-            "Unable to create database connection: missing 'database' parameter from " + DB
-        )
-    pg_host = params.get("host", "127.0.0.1")
-    pg_port = params.get("port", "5432")
-    db_url = f"postgresql+psycopg2://{pg_user}:{pg_pw}@{pg_host}:{pg_port}/{pg_db}"
-    engine = create_engine(db_url)
-    CONN = engine.connect()
-else:
-    raise ValueError(
-        "Either a database file or a config file must be specified with a .db or .ini extension"
-    )
-
+CONN = None  # type: Optional[MockConnection]
+DB = None  # type: Optional[str]
 FILTER_OPTS = {
     "eq": {"label": "equals"},
     "gt": {"label": "greater than"},
@@ -75,77 +39,8 @@ FILTER_OPTS = {
 
 
 @app.route("/<table>", methods=["GET"])
-def get_table(table):
-    if table not in get_sql_tables():
-        return abort(422, f"'{table}' is not a valid table in the database")
-    table_cols = get_sql_columns(table)
-
-    limit = request.args.get("limit", "100")
-    if limit.lower() == "none":
-        limit = -1
-    else:
-        try:
-            limit = int(limit)
-        except ValueError:
-            return abort(422, "'limit' must be an integer or 'none'")
-
-    offset = request.args.get("offset", "0")
-    try:
-        offset = int(offset)
-    except ValueError:
-        return abort(422, "'offset' must be an integer")
-
-    limit = limit + offset
-
-    fmt = request.args.get("format", "html")
-    if fmt not in ["tsv", "csv", "html"]:
-        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
-
-    select = request.args.get("select")
-    if select:
-        select_cols = select.split(",")
-        invalid_cols = list(set(select_cols) - set(table_cols))
-        if invalid_cols:
-            return abort(
-                422,
-                f"The following column(s) do not exist in '{table}' table: "
-                + ", ".join(invalid_cols),
-            )
-        select = ", ".join(select_cols)
-    else:
-        select = "*"
-
-    where_statements = []
-    for tc in table_cols:
-        where = request.args.get(tc)
-        if not where:
-            continue
-        where_statements.append(get_where(where, tc))
-
-    order_by = []
-    order = request.args.get("order")
-    if order:
-        order_by = get_order_by(order)
-
-    # Build & execute the query
-    results = exec_query(
-        table, select, where_statements=where_statements, order_by=order_by, limit=limit
-    )
-
-    # Return results based on format
-    if fmt == "html":
-        return render_html(results, table, table_cols, request.args)
-    headers = results.keys()
-    output = StringIO()
-    sep = "\t"
-    mt = "text/tab-separated-values"
-    if fmt == "csv":
-        sep = ","
-        mt = "text/comma-separated-values"
-    writer = csv.writer(output, delimiter=sep, lineterminator="\n")
-    writer.writerow(list(headers))
-    writer.writerows(list(results)[offset:])
-    return Response(output.getvalue(), mimetype=mt)
+def get_table_by_name(table):
+    return get_table(table)
 
 
 def exec_query(table, select, where_statements=None, order_by=None, limit=100):
@@ -243,6 +138,80 @@ def get_sql_tables():
     return [x["name"] for x in res]
 
 
+def get_table(table):
+    """Get the SQL table for the Flask app."""
+    if table not in get_sql_tables():
+        return abort(422, f"'{table}' is not a valid table in the database")
+    table_cols = get_sql_columns(table)
+
+    limit = request.args.get("limit", "100")
+    if limit.lower() == "none":
+        limit = -1
+    else:
+        try:
+            limit = int(limit)
+        except ValueError:
+            return abort(422, "'limit' must be an integer or 'none'")
+
+    offset = request.args.get("offset", "0")
+    try:
+        offset = int(offset)
+    except ValueError:
+        return abort(422, "'offset' must be an integer")
+
+    limit = limit + offset
+
+    fmt = request.args.get("format", "html")
+    if fmt not in ["tsv", "csv", "html"]:
+        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
+
+    select = request.args.get("select")
+    if select:
+        select_cols = select.split(",")
+        invalid_cols = list(set(select_cols) - set(table_cols))
+        if invalid_cols:
+            return abort(
+                422,
+                f"The following column(s) do not exist in '{table}' table: "
+                + ", ".join(invalid_cols),
+            )
+        select = ", ".join(select_cols)
+    else:
+        select = "*"
+
+    where_statements = []
+    for tc in table_cols:
+        where = request.args.get(tc)
+        if not where:
+            continue
+        where_statements.append(get_where(where, tc))
+
+    order_by = []
+    order = request.args.get("order")
+    if order:
+        order_by = get_order_by(order)
+
+    # Build & execute the query
+    results = exec_query(
+        table, select, where_statements=where_statements, order_by=order_by, limit=limit
+    )
+
+    # Return results based on format
+    if fmt == "html":
+        return render_html(results, table, table_cols, request.args)
+    headers = results.keys()
+    output = StringIO()
+    sep = "\t"
+    mt = "text/tab-separated-values"
+    if fmt == "csv":
+        sep = ","
+        mt = "text/comma-separated-values"
+    writer = csv.writer(output, delimiter=sep, lineterminator="\n")
+    writer.writerow(list(headers))
+    writer.writerows(list(results)[offset:])
+    return Response(output.getvalue(), mimetype=mt)
+
+
 def get_where(where, column):
     """Create a where clause by parsing the horizontal filtering condition."""
     # Parse using Lark grammar
@@ -294,12 +263,12 @@ def get_where(where, column):
     return statement + f"{column} {query_op}", constraint
 
 
-def render_html(results, table, columns, args):
+def render_html(results, table, columns, request_args):
     """Render the results as an HTML table."""
     header_names = list(results.keys())
     results = list(results)
-    offset = int(args.get("offset", "0"))
-    limit = int(args.get("limit", "100"))
+    offset = int(request_args.get("offset", "0"))
+    limit = int(request_args.get("limit", "100"))
     if limit > len(results):
         limit = len(results)
 
@@ -319,7 +288,7 @@ def render_html(results, table, columns, args):
     # Set the options for filtering
     headers = {}
     for h in header_names:
-        fltr = args.get(h)
+        fltr = request_args.get(h)
         if not fltr:
             headers[h] = {"options": FILTER_OPTS, "has_selected": False}
             continue
@@ -334,7 +303,7 @@ def render_html(results, table, columns, args):
     prev_url = None
     if offset > 0:
         # Only include "previous" link if we aren't at the beginning
-        prev_args = args.copy()
+        prev_args = request_args.copy()
         prev_offset = limit - offset
         if prev_offset > 0:
             prev_offset = 0
@@ -343,13 +312,13 @@ def render_html(results, table, columns, args):
         prev_url = url + "?" + "&".join(prev_query)
     # TODO: no way to know if we have next set of results, unless we query all each time
     #       querying with a limit is faster so this would be a performance hit
-    next_args = args.copy()
+    next_args = request_args.copy()
     next_args["offset"] = limit + offset
     next_query = [f"{k}={v}" for k, v in next_args.items()]
     next_url = url + "?" + "&".join(next_query)
 
     # Current URL is used for download links
-    this_url = url + "?" + "&".join([f"{k}={v}" for k, v in args.items()])
+    this_url = url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
 
     return render_template(
         "template.html",
@@ -366,7 +335,67 @@ def render_html(results, table, columns, args):
 
 
 def main():
-    app.run()
+    global CONN, DB
+    parser = ArgumentParser()
+    parser.add_argument("db")
+    parser.add_argument("-t", "--table", help="Default table to show")
+    parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
+    args = parser.parse_args()
+    DB = args.db
+    if not DB:
+        raise NameError("'SPROCKET_DB' environment variable must be set")
+    if DB.endswith(".db"):
+        abspath = os.path.abspath(DB)
+        db_url = "sqlite:///" + abspath + "?check_same_thread=False"
+        engine = create_engine(db_url)
+        CONN = engine.connect()
+    elif DB.endswith(".ini"):
+        config_parser = ConfigParser()
+        config_parser.read(DB)
+        if config_parser.has_section("postgresql"):
+            params = {}
+            for param in config_parser.items("postgresql"):
+                params[param[0]] = param[1]
+        else:
+            raise ValueError(
+                "Unable to create database connection; missing [postgresql] section from " + DB
+            )
+        pg_user = params.get("user")
+        if not pg_user:
+            raise ValueError(
+                "Unable to create database connection: missing 'user' parameter from " + DB
+            )
+        pg_pw = params.get("password")
+        if not pg_pw:
+            raise ValueError(
+                "Unable to create database connection: missing 'password' parameter from " + DB
+            )
+        pg_db = params.get("database")
+        if not pg_db:
+            raise ValueError(
+                "Unable to create database connection: missing 'database' parameter from " + DB
+            )
+        pg_host = params.get("host", "127.0.0.1")
+        pg_port = params.get("port", "5432")
+        db_url = f"postgresql+psycopg2://{pg_user}:{pg_pw}@{pg_host}:{pg_port}/{pg_db}"
+        engine = create_engine(db_url)
+        CONN = engine.connect()
+    else:
+        raise ValueError(
+            "Either a database file or a config file must be specified with a .db or .ini extension"
+        )
+
+    # Maybe set the base route to provided default table
+    if args.table:
+
+        @app.route("/", methods=["GET"])
+        def get_default_table():
+            return get_table(args.table)
+
+    if args.cgi:
+        CGIHandler().run(app)
+    else:
+        app.run()
 
 
 if __name__ == "__main__":
