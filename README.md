@@ -11,13 +11,32 @@ python3 -m pip install .
 
 If you are using a Postgres database, you must also have the [`psycopg2`](https://pypi.org/project/psycopg2/) module installed.
 
-To run `sprocket`, you must set the path to your database (for SQLite) or database configuration `.ini` file (for Postgres), then run the CLI:
+To run `sprocket`, you must include the path to your database (for SQLite) or database configuration `.ini` file (for Postgres):
 ```bash
-export SPROCKET_DB=database.db
-sprocket
+sprocket database.db
 ```
 
 This will start the server on `localhost:5000`.
+
+## Command Line Options
+
+### Default table
+
+When running `sprocket` with no additional arguments, the base path (`/`) will not resolve. To set this path to a default table, include the `-t`/`--table` option:
+```bash
+sprocket database.db -t tablename
+```
+
+### CGI script
+
+You can also run `sprocket` as a CGI script using the `-c`/`--cgi` flag. For example, you can create a `sprocket.sh` script with the following content:
+```bash
+#!/usr/bin/env bash
+
+sprocket database.db -t tablename -c
+```
+
+Your server may need more configuration to run this, see [Server Setup](https://flask.palletsprojects.com/en/2.0.x/deploying/cgi/#server-setup) in the Flask documentation.
 
 ## Paths
 
