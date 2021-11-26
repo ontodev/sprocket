@@ -275,19 +275,45 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         # iter through results and update
         res_updated = []
         for res in results:
-            res = {k: {"value": v, "style": None} for k, v in dict(res).items()}
+            res = {k: {"value": v, "style": None, "message": None} for k, v in dict(res).items()}
             for m in meta_names:
                 meta = res[m]["value"]
                 del res[m]
                 if not meta:
                     continue
                 data = json.loads(meta[5:-1])
+                value_col = m[:-5]
                 if "nulltype" in data:
-                    res[m[:-5]] = {"value": data["value"], "style": "null"}
+                    res[value_col] = {"value": data["value"], "style": "null"}
+                # use a number for violation level to make sure the "worst" violation is displayed
+                violation_level = -1
+                messages = []
+                if "messages" in data:
+                    for msg in data["messages"]:
+                        messages.append(msg["message"])
+                        if msg["level"] == "error":
+                            violation_level = 3
+                        elif msg["level"] == "warn" and violation_level < 3:
+                            violation_level = 2
+                        elif msg["level"] == "info" and violation_level < 2:
+                            violation_level = 1
+                        elif msg["level"] == "debug" and violation_level < 1:
+                            violation_level = 0
+                # set cell style based on violation level
+                if violation_level == 0:
+                    res[value_col]["style"] = "debug"
+                elif violation_level == 1:
+                    res[value_col]["style"] = "info"
+                elif violation_level == 2:
+                    res[value_col]["style"] = "warn"
+                elif violation_level == 3:
+                    res[value_col]["style"] = "error"
+                # join multiple messages with line breaks
+                res[value_col]["message"] = "\n".join(messages)
             res_updated.append(list(res.values()))
         results = res_updated
     else:
-        results = [{"value": x, "style": None} for x in list(results)]
+        results = [{"value": x, "style": None, "message": None} for x in list(results)]
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
     if limit > len(results):

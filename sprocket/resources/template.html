@@ -5,8 +5,23 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
 	<style>
+		.bg-debug {
+			background-color: #abc4ff !important;
+		}
+		.bg-error {
+			background-color: #ffabab !important;
+		}
+		.bg-info {
+			background-color: #fff8ab !important;
+		}
 		.bg-null {
 			background-color: #ededed !important;
+		}
+		.bg-warn {
+			background-color: #ffcdab !important;
+		}
+		.tooltip-inner {
+			white-space: pre-wrap;
 		}
 	</style>
 </head>
@@ -124,11 +139,15 @@
 			<tr>
 				{% for itm in row %}
 				{% if itm %}
-					{% if itm["style"] == "null" %}
-					<td class="bg-null">{{ itm["value"] }}</td>
+					{% if itm["style"] and itm["message"] %}
+					<td class="bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+					{% elif itm["style"] %}
+					<td class="bg-{{ itm['style'] }}">
 					{% else %}
-					<td>{{ itm["value"] }}</td>
+					<td>
 					{% endif %}
+					{{ itm["value"] }}
+					</td>
 				{% else %}
 				<td></td>
 				{% endif %}
@@ -158,6 +177,12 @@
 	</div>
 
 	<script>
+		// Enable tooltips
+		var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+		var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+		  return new bootstrap.Tooltip(tooltipTriggerEl)
+		})
+
 		// Init headers
 		var headers = [];
 		{% for h in headers %}
