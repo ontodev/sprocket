@@ -1,17 +1,17 @@
 import csv
+import json
 import os
 
 from argparse import ArgumentParser
 from copy import deepcopy
 from configparser import ConfigParser
-from typing import Optional
-
 from flask import abort, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
-from sqlalchemy.engine.mock import MockConnection
+from sqlalchemy.engine.base import Connection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
+from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
@@ -20,7 +20,7 @@ app = Flask(
 )
 app.url_map.strict_slashes = False
 
-CONN = None  # type: Optional[MockConnection]
+CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
 FILTER_OPTS = {
     "eq": {"label": "equals"},
@@ -263,10 +263,31 @@ def get_where(where, column):
     return statement + f"{column} {query_op}", constraint
 
 
-def render_html(results, table, columns, request_args):
+def render_html(results, table, columns, request_args, hide_meta=True):
     """Render the results as an HTML table."""
     header_names = list(results.keys())
-    results = list(results)
+    if hide_meta:
+        # exclude *_meta columns from display
+        meta_names = [x for x in header_names if x.endswith("_meta")]
+        header_names = [x for x in header_names if x not in meta_names]
+        # also update columns for selections
+        columns = [x for x in columns if not x.endswith("_meta")]
+        # iter through results and update
+        res_updated = []
+        for res in results:
+            res = {k: {"value": v, "style": None} for k, v in dict(res).items()}
+            for m in meta_names:
+                meta = res[m]["value"]
+                del res[m]
+                if not meta:
+                    continue
+                data = json.loads(meta[5:-1])
+                if "nulltype" in data:
+                    res[m[:-5]] = {"value": data["value"], "style": "null"}
+            res_updated.append(list(res.values()))
+        results = res_updated
+    else:
+        results = [{"value": x, "style": None} for x in list(results)]
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
     if limit > len(results):
