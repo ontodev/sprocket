@@ -193,25 +193,16 @@
 				{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 				{% if itm %}
 					{% if itm["style"] and itm["message"] %}
-						<td class="bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+						<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
 							<div class="row justify-content-between">
 								<div class="col-auto">{{ itm["value"] }}</div>
 								<div class="col-auto">
-									<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['json'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+									<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
 								</div>
 							</div>
 						</td>
 					{% elif itm["style"] %}
-						<td class="bg-{{ itm['style'] }}">
-							<div class="row justify-content-between">
-								<div class="col-auto">{{ itm["value"] }}</div>
-								<div class="col-auto">
-									<div class="col-auto">
-										<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['json'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
-									</div>
-								</div>
-							</div>
-						</td>
+						<td class="bg-{{ itm['style'] }}">{{ itm["value"] }}</td>
 					{% else %}
 						<td>{{ itm["value"] }}</td>
 					{% endif %}
@@ -256,28 +247,46 @@
 		headers.push('{{ h }}');
 		{% endfor %}
 
-		function condense(rawJson, rowNum, cellNum) {
+		function condense(level, msg, rowNum, cellNum) {
 			document.getElementById(`expandedRow${rowNum}`).remove();
+
+			// Add tooltip
+			var td = document.getElementById(`td${rowNum}-${cellNum}`);
+			td.setAttribute("data-bs-toggle", "tooltip");
+			td.setAttribute("data-bs-placement", "bottom");
+			td.setAttribute("data-bs-original-title", msg);
+			td.setAttribute("title", msg);
 
 			// Update btn
 			var btn = document.getElementById(`expand${rowNum}`);
-			btn.href = `javascript:expand('${rawJson}', ${rowNum}, ${cellNum})`;
+			btn.href = `javascript:expand('${level}', '${msg}', ${rowNum}, ${cellNum})`;
 			var txt = document.getElementById(`expandInner${rowNum}`);
 			txt.innerText = "+";
 		}
 
-		function expand(rawJson, rowNum, cellNum) {
+		function expand(level, msg, rowNum, cellNum) {
 			var row = document.getElementById(`row${rowNum}`);
 			var newHtml = `<tr id="expandedRow${rowNum}">`;
 			for (i=0; i < cellNum - 1; i++) {
 				newHtml += "<td></td>";
 			}
-			newHtml += `<td>${rawJson}</td>`
+			newHtml += `<td>${level.toUpperCase()}: ${msg}</td>`
 			row.insertAdjacentHTML('afterend', newHtml);
+
+			// Remove tooltip
+			var td = document.getElementById(`td${rowNum}-${cellNum}`);
+			var tooltipID = td.getAttribute("aria-describedby");
+			td.removeAttribute("data-bs-toggle");
+			td.removeAttribute("data-bs-placement");
+			td.removeAttribute("data-bs-original-title");
+			td.removeAttribute("title");
+			td.removeAttribute("aria-describedby");
+			var tt = document.getElementById(tooltipID);
+			tt.remove();
 
 			// Update btn
 			var btn = document.getElementById(`expand${rowNum}`);
-			btn.href = `javascript:condense('${rawJson}', ${rowNum}, ${cellNum})`;
+			btn.href = `javascript:condense('${level}', '${msg}', ${rowNum}, ${cellNum})`;
 			var txt = document.getElementById(`expandInner${rowNum}`);
 			txt.innerText = "-";
 		}
