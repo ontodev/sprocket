@@ -317,8 +317,11 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     continue
                 data = json.loads(meta[5:-1])
                 value_col = m[:-5]
+                # set the value to what is given in the JSON
+                # if a cell is invalid, the cell may be NULL but JSON may have value
+                res[value_col]["value"] = data["value"]
                 if "nulltype" in data:
-                    res[value_col] = {"value": data["value"], "style": "null"}
+                    res[value_col]["style"] = "null"
                 # use a number for violation level to make sure the "worst" violation is displayed
                 violation_level = -1
                 messages = []
