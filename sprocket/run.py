@@ -15,6 +15,8 @@ from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
+import logging
+
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
 )
@@ -43,9 +45,9 @@ def get_table_by_name(table):
     return get_table(table)
 
 
-def exec_query(table, select, where_statements=None, order_by=None, limit=100):
+def exec_query(table, select, where_statements=None, order_by=None, violations=None, limit=100):
     """Create a query from, minimally, a table name and a select statement."""
-    query = f"SELECT {select} FROM {table}"
+    query = f"SELECT {', '.join(select)} FROM {table}"
     const_dict = {}
     # Add keys for any where statements using user input values
     if where_statements:
@@ -61,6 +63,21 @@ def exec_query(table, select, where_statements=None, order_by=None, limit=100):
             expanded_statements.append(ws)
             n += 1
         query += " WHERE " + " AND ".join(expanded_statements)
+    if violations:
+        # Make sure to start this part of the query correctly
+        if not where_statements:
+            query += " WHERE "
+        else:
+            query += " AND "
+        # For each *_meta column, add LIKE filters for the violation levels
+        meta_cols = [x for x in select if x.endswith("_meta")]
+        meta_filters = []
+        for m in meta_cols:
+            likes = []
+            for v in violations:
+                likes.append(f'{m} LIKE \'%"level": "{v}"%\'')
+            meta_filters.append("(" + " OR ".join(likes) + ")")
+        query += " AND ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
     if limit > 0:
@@ -138,7 +155,7 @@ def get_sql_tables():
     return [x["name"] for x in res]
 
 
-def get_table(table):
+def get_table(table, hide_meta=True):
     """Get the SQL table for the Flask app."""
     if table not in get_sql_tables():
         return abort(422, f"'{table}' is not a valid table in the database")
@@ -175,9 +192,11 @@ def get_table(table):
                 f"The following column(s) do not exist in '{table}' table: "
                 + ", ".join(invalid_cols),
             )
-        select = ", ".join(select_cols)
+        if hide_meta:
+            # Add any necessary meta cols, since they don't appear in select filters
+            select_cols.extend([f"{x}_meta" for x in select_cols if f"{x}_meta" in table_cols])
     else:
-        select = "*"
+        select_cols = ["*"]
 
     where_statements = []
     for tc in table_cols:
@@ -191,9 +210,24 @@ def get_table(table):
     if order:
         order_by = get_order_by(order)
 
+    violations = request.args.get("violations")
+    if violations:
+        violations = violations.split(",")
+        for v in violations:
+            if v not in ["debug", "info", "warn", "error"]:
+                return abort(
+                    422,
+                    f"'violations' contains invalid level '{v}' - must be one of: debug, info, warn, error",
+                )
+
     # Build & execute the query
     results = exec_query(
-        table, select, where_statements=where_statements, order_by=order_by, limit=limit
+        table,
+        select_cols,
+        where_statements=where_statements,
+        order_by=order_by,
+        violations=violations,
+        limit=limit,
     )
 
     # Return results based on format
@@ -345,6 +379,9 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         cur_options[opt]["selected"] = True
         headers[h] = {"options": cur_options, "const": val}
 
+    # Set the options for violation filtering
+    violations = request_args.get("violations", "").split(",")
+
     # Get URLs for "previous" and "next" links
     url = "./" + table
     prev_url = None
@@ -372,6 +409,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         select=columns,
         options=options,
         headers=headers,
+        violations=violations,
         rows=results[offset:],
         offset=offset,
         limit=limit,

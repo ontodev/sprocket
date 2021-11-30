@@ -87,8 +87,49 @@
 								</div>
 								<div class="col-auto">
 									<div class="row">
+										<p class="lead">Filter violations</p>
+										<div class="row">
+											<div class="col-md-6">
+												<div class="form-check">
+													{% if "debug" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug">
+													{% endif %}
+													<label class="form-check-label" for="debug">debug</label>
+												</div>
+												<div class="form-check">
+													{% if "warn" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn">
+													{% endif %}
+													<label class="form-check-label" for="warn">warn</label>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-check">
+													{% if "info" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info">
+													{% endif %}
+													<label class="form-check-label" for="info">info</label>
+												</div>
+												<div class="form-check">
+													{% if "error" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error">
+													{% endif %}
+													<label class="form-check-label" for="error">error</label>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="row" style="padding-top: 20px;">
 										<div class="col-auto">
-											<label for="limit" class="col-form-label" style="margin-left:20px;">Results per page</label>
+											<label for="limitValue" class="col-form-label">Results per page</label>
 										</div>
 										<div class="col-auto">
 											<select class="form-select" id="limitValue" name="limit">
@@ -96,7 +137,7 @@
 											</select>
 										</div>
 									</div>
-									<div class="row float-end" style="padding-top:20px;">
+									<div class="row" style="padding-top:20px;">
 										<div class="col-auto">
 											<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
 										</div>
@@ -246,6 +287,19 @@
 			}
 			if (s.length > 0) {
 				args.push("select=" + s.join(","));
+			}
+
+			// Get the violation filters
+			var n = document.getElementsByName('violation[]');
+			var v = [];
+			for (i=0;i < (n.length); i++) {
+				console.log(n[i].checked);
+				if (n[i].checked) {
+					v.push(n[i].value);
+				}
+			}
+			if (v.length > 0) {
+				args.push("violations=" + v.join(","));
 			}
 
 			// Get the limit option
