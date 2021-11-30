@@ -20,6 +20,14 @@
 		.bg-warn {
 			background-color: #ffcdab !important;
 		}
+		.inner-btn {
+			margin-top: -11px;
+			margin-left: -3px;
+		}
+		.sm-btn {
+			height: 18px;
+			width: 30px;
+		}
 		.tooltip-inner {
 			white-space: pre-wrap;
 		}
@@ -154,7 +162,7 @@
 		</div>
 	</div>
 
-	<table class="table">
+	<table class="table" id="sqlTable">
 		<thead>
 			<tr>
 				{% for th in headers %}
@@ -176,19 +184,37 @@
 			</tr>
 		</thead>
 		<tbody>
+			{% set vars = {'row_num': 0} %}
 			{% for row in rows %}
-			<tr>
+			{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
+			<tr id="row{{ vars.row_num }}">
+				{% set inner_vars = {'cell_num': 0} %}
 				{% for itm in row %}
+				{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 				{% if itm %}
 					{% if itm["style"] and itm["message"] %}
-					<td class="bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+						<td class="bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+							<div class="row justify-content-between">
+								<div class="col-auto">{{ itm["value"] }}</div>
+								<div class="col-auto">
+									<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['json'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+								</div>
+							</div>
+						</td>
 					{% elif itm["style"] %}
-					<td class="bg-{{ itm['style'] }}">
+						<td class="bg-{{ itm['style'] }}">
+							<div class="row justify-content-between">
+								<div class="col-auto">{{ itm["value"] }}</div>
+								<div class="col-auto">
+									<div class="col-auto">
+										<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['json'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+									</div>
+								</div>
+							</div>
+						</td>
 					{% else %}
-					<td>
+						<td>{{ itm["value"] }}</td>
 					{% endif %}
-					{{ itm["value"] }}
-					</td>
 				{% else %}
 				<td></td>
 				{% endif %}
@@ -229,6 +255,32 @@
 		{% for h in headers %}
 		headers.push('{{ h }}');
 		{% endfor %}
+
+		function condense(rawJson, rowNum, cellNum) {
+			document.getElementById(`expandedRow${rowNum}`).remove();
+
+			// Update btn
+			var btn = document.getElementById(`expand${rowNum}`);
+			btn.href = `javascript:expand('${rawJson}', ${rowNum}, ${cellNum})`;
+			var txt = document.getElementById(`expandInner${rowNum}`);
+			txt.innerText = "+";
+		}
+
+		function expand(rawJson, rowNum, cellNum) {
+			var row = document.getElementById(`row${rowNum}`);
+			var newHtml = `<tr id="expandedRow${rowNum}">`;
+			for (i=0; i < cellNum - 1; i++) {
+				newHtml += "<td></td>";
+			}
+			newHtml += `<td>${rawJson}</td>`
+			row.insertAdjacentHTML('afterend', newHtml);
+
+			// Update btn
+			var btn = document.getElementById(`expand${rowNum}`);
+			btn.href = `javascript:condense('${rawJson}', ${rowNum}, ${cellNum})`;
+			var txt = document.getElementById(`expandInner${rowNum}`);
+			txt.innerText = "-";
+		}
 
 		function reset() {
 			var url = window.location.href.split('?')[0];

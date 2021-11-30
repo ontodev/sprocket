@@ -309,7 +309,10 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         # iter through results and update
         res_updated = []
         for res in results:
-            res = {k: {"value": v, "style": None, "message": None} for k, v in dict(res).items()}
+            res = {
+                k: {"value": v, "style": None, "message": None, "json": None}
+                for k, v in dict(res).items()
+            }
             for m in meta_names:
                 meta = res[m]["value"]
                 del res[m]
@@ -317,6 +320,9 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     continue
                 data = json.loads(meta[5:-1])
                 value_col = m[:-5]
+                res[value_col]["json"] = "<br>".join(
+                    json.dumps(data, indent=2).split("\n")
+                ).replace(" ", "&nbsp;")
                 # set the value to what is given in the JSON
                 # if a cell is invalid, the cell may be NULL but JSON may have value
                 res[value_col]["value"] = data["value"]
