@@ -1,5 +1,7 @@
 import csv
+import json
 import os
+import ssl
 
 from argparse import ArgumentParser
 from copy import deepcopy
@@ -12,8 +14,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine.mock import MockConnection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
+from urllib.request import urlopen
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
+
+
+ssl._create_default_https_context = ssl._create_unverified_context
 
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
@@ -342,6 +348,7 @@ def main():
     parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
     args = parser.parse_args()
     DB = args.db
+    delete_on_exit = None
     if not DB:
         raise NameError("'SPROCKET_DB' environment variable must be set")
     if DB.endswith(".db"):
@@ -381,21 +388,68 @@ def main():
         engine = create_engine(db_url)
         CONN = engine.connect()
     else:
-        raise ValueError(
-            "Either a database file or a config file must be specified with a .db or .ini extension"
-        )
+        # try as API endpoint
+        try:
+            with urlopen(DB) as response:
+                data_str = response.read()
+                encoding = response.headers.get_content_charset('utf-8')
+                decoded_str = data_str.decode(encoding)
+            data = json.loads(decoded_str)
+        except ValueError:
+            raise ValueError(
+                "A database file, a config file, or an endpoint URL must be specified"
+            )
+        # Track to make sure we delete this file when we're done with it
+        delete_on_exit = ".temp.db"
 
-    # Maybe set the base route to provided default table
-    if args.table:
+        try:
+            engine = create_engine("sqlite:///.temp.db?check_same_thread=False")
+            CONN = engine.connect()
+            # Create the new table, assuming the API has table name at end
+            table = DB.split("/")[-1]
+            if "?" in table:
+                # Remove parameters
+                table = table.split("?")[0]
+            import logging
+            lines = []
+            i = 0
+            for h in data[0].keys():
+                i += 1
+                lines.append(f"'{h}' TEXT")
+            CONN.execute(f"CREATE TABLE {table} (\n" + ",\n".join(lines) + "\n);")
+            # Add data to table
+            for row in data:
+                vals = []
+                i = 0
+                d = {}
+                for value in row.values():
+                    if not value:
+                        vals.append("NULL")
+                    else:
+                        i += 1
+                        vals.append(f":val{i}")
+                        d[f"val{i}"] = value
+                query = sql_text(f"INSERT INTO {table} VALUES (" + ", ".join(vals) + ");")
+                CONN.execute(query, d)
+        except Exception as e:
+            if os.path.exists(".temp.db"):
+                os.remove(".temp.db")
+            raise e
 
-        @app.route("/", methods=["GET"])
-        def get_default_table():
-            return get_table(args.table)
+    try:
+        # Maybe set the base route to provided default table
+        if args.table:
+            @app.route("/", methods=["GET"])
+            def get_default_table():
+                return get_table(args.table)
 
-    if args.cgi:
-        CGIHandler().run(app)
-    else:
-        app.run()
+        if args.cgi:
+            CGIHandler().run(app)
+        else:
+            app.run()
+    finally:
+        if delete_on_exit and os.path.exists(delete_on_exit):
+            os.remove(delete_on_exit)
 
 
 if __name__ == "__main__":
