@@ -11,12 +11,15 @@ python3 -m pip install .
 
 If you are using a Postgres database, you must also have the [`psycopg2`](https://pypi.org/project/psycopg2/) module installed.
 
-To run `sprocket`, you must include the path to your database (for SQLite) or database configuration `.ini` file (for Postgres):
+To run `sprocket`, you must include the path to your database (for SQLite) or database configuration `.ini` file (for Postgres). This will start the server on `localhost:5000`:
 ```bash
 sprocket database.db
 ```
 
-This will start the server on `localhost:5000`.
+Alternatively, you can provide the URL to a PostGRES Swagger endpoint, such as https://www.cmi-pb.org/api/v2. This will load all tables within the endpoint to browse. If you want to save the SQLite database file that is created, you can do so with `-s`/`--save-database` (this will fail if a file already exists at the given path):
+```bash
+sprocket https://www.cmi-pb.org/api/v2 -s database.db
+```
 
 ## Testing
 
@@ -34,7 +37,7 @@ sprocket test.db -t test
 
 ### Default table
 
-When running `sprocket` with no additional arguments, the base path (`/`) will not resolve. To set this path to a default table, include the `-t`/`--table` option:
+When running `sprocket` with no additional arguments, the base path (`/`) will show a list of available tables. To set this path to a default table, include the `-t`/`--table` option:
 ```bash
 sprocket database.db -t tablename
 ```

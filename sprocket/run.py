@@ -47,7 +47,31 @@ def get_table_by_name(table):
     return get_table(table)
 
 
-def exec_query(table, select, where_statements=None, order_by=None, violations=None, limit=100):
+def add_table(data, table):
+    """Add a table to the database from Swagger endpoint data."""
+    # Create the table
+    lines = []
+    col_to_type = get_sql_types(data)
+    for c, t in col_to_type.items():
+        lines.append(f"'{c}' {t}")
+    CONN.execute(f"CREATE TABLE {table} (\n" + ",\n".join(lines) + "\n);")
+    # Add data to table
+    for row in data:
+        vals = []
+        i = 0
+        d = {}
+        for value in row.values():
+            if value is None:
+                vals.append("NULL")
+            else:
+                i += 1
+                vals.append(f":val{i}")
+                d[f"val{i}"] = value
+        query = sql_text(f"INSERT INTO {table} VALUES (" + ", ".join(vals) + ");")
+        CONN.execute(query, d)
+
+
+def exec_query(table, select, where_statements=None, order_by=None, violations=None):
     """Create a query from, minimally, a table name and a select statement."""
     query = f"SELECT {', '.join(select)} FROM {table}"
     const_dict = {}
@@ -82,8 +106,6 @@ def exec_query(table, select, where_statements=None, order_by=None, violations=N
         query += " AND ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
-    if limit > 0:
-        query += f" LIMIT {limit}"
     query = sql_text(query)
     for k, v in const_dict.items():
         if isinstance(v, list):
@@ -133,6 +155,14 @@ def get_order_by(order):
     return order_by
 
 
+def get_remote_json(url):
+    with urlopen(url) as response:
+        data_str = response.read()
+        encoding = response.headers.get_content_charset("utf-8")
+        decoded_str = data_str.decode(encoding)
+    return json.loads(decoded_str)
+
+
 def get_sql_columns(table):
     """Get a list of columns from a table."""
     # Check for required columns
@@ -155,6 +185,31 @@ def get_sql_tables():
             "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public'"
         )
     return [x["name"] for x in res]
+
+
+def get_sql_types(data, col_to_type=None):
+    """Create a dictionary of column name to SQL type for all keys."""
+    if not col_to_type:
+        col_to_type = {}
+    cols = data[0].keys()
+    for itm in data:
+        for h, v in itm.items():
+            if v:
+                t = type(v)
+                if t == str:
+                    col_to_type[h] = "TEXT"
+                elif t == int:
+                    col_to_type[h] = "INTEGER"
+                elif t == float:
+                    col_to_type[h] = "FLOAT"
+                else:
+                    col_to_type[h] = "BLOB"
+        if set(cols) == set(col_to_type.keys()):
+            return col_to_type
+    missing = set(cols) - set(col_to_type.keys())
+    for m in missing:
+        col_to_type[m] = "NULL"
+    return col_to_type
 
 
 def get_table(table, hide_meta=True):
@@ -229,7 +284,6 @@ def get_table(table, hide_meta=True):
         where_statements=where_statements,
         order_by=order_by,
         violations=violations,
-        limit=limit,
     )
 
     # Return results based on format
@@ -244,7 +298,7 @@ def get_table(table, hide_meta=True):
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results)[offset:])
+    writer.writerows(list(results)[offset : limit + offset])
     return Response(output.getvalue(), mimetype=mt)
 
 
@@ -356,8 +410,11 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     else:
         # No styles or tooltip messages
         results = [{"value": x, "style": None, "message": None} for x in list(results)]
+
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
+    total = len(results)
+    results = list(results)[offset : limit + offset]
 
     # Set the options for the "results per page" drop down
     options = []
@@ -391,6 +448,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     # Get URLs for "previous" and "next" links
     url = "./" + table
     prev_url = None
+    next_url = None
     if offset > 0:
         # Only include "previous" link if we aren't at the beginning
         prev_args = request_args.copy()
@@ -400,13 +458,12 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items()]
         prev_url = url + "?" + "&".join(prev_query)
-    # TODO: no way to know if we have next set of results, unless we query all each time
-    #       querying with a limit is faster so this would be a performance hit
-    #       we need a way to know the *total* results w/o limit
-    next_args = request_args.copy()
-    next_args["offset"] = limit + offset
-    next_query = [f"{k}={v}" for k, v in next_args.items()]
-    next_url = url + "?" + "&".join(next_query)
+    if limit + offset < total:
+        # Only include "next" link if we aren't at the end
+        next_args = request_args.copy()
+        next_args["offset"] = limit + offset
+        next_query = [f"{k}={v}" for k, v in next_args.items()]
+        next_url = url + "?" + "&".join(next_query)
 
     # Current URL is used for download links
     this_url = url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
@@ -417,9 +474,10 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         options=options,
         headers=headers,
         violations=violations,
-        rows=results[offset:],
+        rows=results,
         offset=offset,
         limit=limit,
+        total=total,
         this_url=this_url,
         prev_url=prev_url,
         next_url=next_url,
@@ -432,9 +490,14 @@ def main():
     parser.add_argument("db")
     parser.add_argument("-t", "--table", help="Default table to show")
     parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
+    parser.add_argument(
+        "-s", "--save-database", help="Save a database from Swagger endpoint to given path"
+    )
     args = parser.parse_args()
+
     DB = args.db
     delete_on_exit = None
+    tables = []
     if not DB:
         raise NameError("'SPROCKET_DB' environment variable must be set")
     if DB.endswith(".db"):
@@ -442,6 +505,7 @@ def main():
         db_url = "sqlite:///" + abspath + "?check_same_thread=False"
         engine = create_engine(db_url)
         CONN = engine.connect()
+        tables = get_sql_tables()
     elif DB.endswith(".ini"):
         config_parser = ConfigParser()
         config_parser.read(DB)
@@ -473,59 +537,56 @@ def main():
         db_url = f"postgresql+psycopg2://{pg_user}:{pg_pw}@{pg_host}:{pg_port}/{pg_db}"
         engine = create_engine(db_url)
         CONN = engine.connect()
+        tables = get_sql_tables()
     else:
         # try as API endpoint
         try:
-            with urlopen(DB) as response:
-                data_str = response.read()
-                encoding = response.headers.get_content_charset("utf-8")
-                decoded_str = data_str.decode(encoding)
-            data = json.loads(decoded_str)
+            # If we cannot open the DB param, it's not a URL
+            data = get_remote_json(DB)
+            # Validate that this is JSON for a Swagger endpoint
+            if "swagger" not in data:
+                raise ValueError
         except ValueError:
-            raise ValueError("A database file, a config file, or an endpoint URL must be specified")
-        # Track to make sure we delete this file when we're done with it
-        delete_on_exit = ".temp.db"
+            raise ValueError(
+                "A database file, a config file, or a Swagger endpoint URL must be specified"
+            )
+        # Read the endpoint to get the table names
+        tables = []
+        for path in data["paths"].keys():
+            if path != "/":
+                tables.append(path[1:])
 
+        if args.save_database:
+            db = args.save_database
+            if os.path.exists(db):
+                raise ValueError("A database already exists at " + db)
+        else:
+            # Use temp DB and delete when finished
+            db = ".temp.db"
+            delete_on_exit = ".temp.db"
         try:
-            engine = create_engine("sqlite:///.temp.db?check_same_thread=False")
+            engine = create_engine(f"sqlite:///{db}?check_same_thread=False")
             CONN = engine.connect()
-            # Create the new table, assuming the API has table name at end
-            table = DB.split("/")[-1]
-            if "?" in table:
-                # Remove parameters
-                table = table.split("?")[0]
-            lines = []
-            i = 0
-            for h in data[0].keys():
-                i += 1
-                lines.append(f"'{h}' TEXT")
-            CONN.execute(f"CREATE TABLE {table} (\n" + ",\n".join(lines) + "\n);")
-            # Add data to table
-            for row in data:
-                vals = []
-                i = 0
-                d = {}
-                for value in row.values():
-                    if not value:
-                        vals.append("NULL")
-                    else:
-                        i += 1
-                        vals.append(f":val{i}")
-                        d[f"val{i}"] = value
-                query = sql_text(f"INSERT INTO {table} VALUES (" + ", ".join(vals) + ");")
-                CONN.execute(query, d)
+            for t in tables:
+                data = get_remote_json(DB + "/" + t)
+                add_table(data, t)
         except Exception as e:
-            if os.path.exists(".temp.db"):
-                os.remove(".temp.db")
+            if delete_on_exit and os.path.exists(delete_on_exit):
+                os.remove(delete_on_exit)
             raise e
 
     try:
-        # Maybe set the base route to provided default table
         if args.table:
-
+            # Maybe set the base route to provided default table
             @app.route("/", methods=["GET"])
             def get_default_table():
                 return get_table(args.table)
+
+        else:
+            # Otherwise show a list of available tables
+            @app.route("/", methods=["GET"])
+            def show_all_tables():
+                return render_template("index.html", tables=tables)
 
         if args.cgi:
             CGIHandler().run(app)
