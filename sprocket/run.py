@@ -82,6 +82,7 @@ def exec_query(table, select, where_statements=None, order_by=None, violations=N
         query += " ORDER BY " + ", ".join(order_by)
     if limit > 0:
         query += f" LIMIT {limit}"
+    logging.error(query)
     query = sql_text(query)
     for k, v in const_dict.items():
         if isinstance(v, list):
@@ -301,7 +302,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     """Render the results as an HTML table."""
     header_names = list(results.keys())
     if hide_meta:
-        # exclude *_meta columns from display
+        # exclude *_meta columns from display and use the values to render cell styles
         meta_names = [x for x in header_names if x.endswith("_meta")]
         header_names = [x for x in header_names if x not in meta_names]
         # also update columns for selections
@@ -309,10 +310,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         # iter through results and update
         res_updated = []
         for res in results:
-            res = {
-                k: {"value": v, "style": None, "message": None, "json": None}
-                for k, v in dict(res).items()
-            }
+            res = {k: {"value": v, "style": None, "message": None} for k, v in dict(res).items()}
             for m in meta_names:
                 meta = res[m]["value"]
                 del res[m]
@@ -320,29 +318,28 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     continue
                 data = json.loads(meta[5:-1])
                 value_col = m[:-5]
-                res[value_col]["json"] = "<br>".join(
-                    json.dumps(data, indent=2).split("\n")
-                ).replace(" ", "&nbsp;")
-                # set the value to what is given in the JSON
-                # if a cell is invalid, the cell may be NULL but JSON may have value
+                # Set the value to what is given in the JSON (as "value")
                 res[value_col]["value"] = data["value"]
                 if "nulltype" in data:
+                    # Set null style and go to next
                     res[value_col]["style"] = "null"
-                # use a number for violation level to make sure the "worst" violation is displayed
+                    continue
+                # Use a number for violation level to make sure the "worst" violation is displayed
                 violation_level = -1
                 messages = []
                 if "messages" in data:
                     for msg in data["messages"]:
-                        messages.append(msg["message"])
-                        if msg["level"] == "error":
+                        lvl = msg["level"]
+                        messages.append(lvl.upper() + ": " + msg["message"])
+                        if lvl == "error":
                             violation_level = 3
-                        elif msg["level"] == "warn" and violation_level < 3:
+                        elif lvl == "warn" and violation_level < 3:
                             violation_level = 2
-                        elif msg["level"] == "info" and violation_level < 2:
+                        elif lvl == "info" and violation_level < 2:
                             violation_level = 1
-                        elif msg["level"] == "debug" and violation_level < 1:
+                        elif lvl == "debug" and violation_level < 1:
                             violation_level = 0
-                # set cell style based on violation level
+                # Set cell style based on violation level
                 if violation_level == 0:
                     res[value_col]["style"] = "debug"
                 elif violation_level == 1:
@@ -351,16 +348,15 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     res[value_col]["style"] = "warn"
                 elif violation_level == 3:
                     res[value_col]["style"] = "error"
-                # join multiple messages with line breaks
+                # Join multiple messages with line breaks
                 res[value_col]["message"] = "\n".join(messages)
             res_updated.append(list(res.values()))
         results = res_updated
     else:
+        # No styles or tooltip messages
         results = [{"value": x, "style": None, "message": None} for x in list(results)]
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
-    if limit > len(results):
-        limit = len(results)
 
     # Set the options for the "results per page" drop down
     options = []
@@ -397,14 +393,15 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     if offset > 0:
         # Only include "previous" link if we aren't at the beginning
         prev_args = request_args.copy()
-        prev_offset = limit - offset
-        if prev_offset > 0:
+        prev_offset = offset - limit
+        if prev_offset < 0:
             prev_offset = 0
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items()]
         prev_url = url + "?" + "&".join(prev_query)
     # TODO: no way to know if we have next set of results, unless we query all each time
     #       querying with a limit is faster so this would be a performance hit
+    #       we need a way to know the *total* results w/o limit
     next_args = request_args.copy()
     next_args["offset"] = limit + offset
     next_query = [f"{k}={v}" for k, v in next_args.items()]

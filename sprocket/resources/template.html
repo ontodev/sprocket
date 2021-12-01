@@ -217,7 +217,11 @@
 
 	<div class="row" style="padding-left:10px; padding-right:10px;">
 		<div class="col">
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }}</p>
+			{% if (limit + offset) > (rows|length + offset) %}
+				<p class="fst-italic">Showing results {{ offset + 1 }}-{{ rows|length + offset }}</p>
+			{% else %}
+				<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }}</p>
+			{% endif %}
 		</div>
 		<div class="col">
 			<div class="float-end">
