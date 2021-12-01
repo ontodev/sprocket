@@ -16,7 +16,7 @@ To run `sprocket`, you must include the path to your database (for SQLite) or da
 sprocket database.db
 ```
 
-Alternatively, you can provide the URL to a PostGRES Swagger endpoint, such as https://www.cmi-pb.org/api/v2. This will load all tables within the endpoint to browse. If you want to save the SQLite database file that is created, you can do so with `-s`/`--save-database` (this will fail if a file already exists at the given path):
+Alternatively, you can provide the URL to a PostGRES Swagger endpoint, such as https://www.cmi-pb.org/api/v2. This will load all tables within the endpoint to browse. If you want to save the SQLite database file that is created, you can do so with `-s`/`--save-database` (this will fail if a file already exists at the given path). Otherwise, the database will be created at `.temp.db` and will be deleted on exit.
 ```bash
 sprocket https://www.cmi-pb.org/api/v2 -s database.db
 ```
