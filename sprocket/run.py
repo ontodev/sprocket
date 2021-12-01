@@ -392,13 +392,11 @@ def main():
         try:
             with urlopen(DB) as response:
                 data_str = response.read()
-                encoding = response.headers.get_content_charset('utf-8')
+                encoding = response.headers.get_content_charset("utf-8")
                 decoded_str = data_str.decode(encoding)
             data = json.loads(decoded_str)
         except ValueError:
-            raise ValueError(
-                "A database file, a config file, or an endpoint URL must be specified"
-            )
+            raise ValueError("A database file, a config file, or an endpoint URL must be specified")
         # Track to make sure we delete this file when we're done with it
         delete_on_exit = ".temp.db"
 
@@ -410,7 +408,6 @@ def main():
             if "?" in table:
                 # Remove parameters
                 table = table.split("?")[0]
-            import logging
             lines = []
             i = 0
             for h in data[0].keys():
@@ -439,6 +436,7 @@ def main():
     try:
         # Maybe set the base route to provided default table
         if args.table:
+
             @app.route("/", methods=["GET"])
             def get_default_table():
                 return get_table(args.table)
