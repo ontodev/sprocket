@@ -1,26 +1,28 @@
 import csv
+import json
 import os
 
 from argparse import ArgumentParser
 from copy import deepcopy
 from configparser import ConfigParser
-from typing import Optional
-
 from flask import abort, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
-from sqlalchemy.engine.mock import MockConnection
+from sqlalchemy.engine.base import Connection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
+from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
+
+import logging
 
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
 )
 app.url_map.strict_slashes = False
 
-CONN = None  # type: Optional[MockConnection]
+CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
 FILTER_OPTS = {
     "eq": {"label": "equals"},
@@ -43,9 +45,9 @@ def get_table_by_name(table):
     return get_table(table)
 
 
-def exec_query(table, select, where_statements=None, order_by=None, limit=100):
+def exec_query(table, select, where_statements=None, order_by=None, violations=None, limit=100):
     """Create a query from, minimally, a table name and a select statement."""
-    query = f"SELECT {select} FROM {table}"
+    query = f"SELECT {', '.join(select)} FROM {table}"
     const_dict = {}
     # Add keys for any where statements using user input values
     if where_statements:
@@ -61,10 +63,26 @@ def exec_query(table, select, where_statements=None, order_by=None, limit=100):
             expanded_statements.append(ws)
             n += 1
         query += " WHERE " + " AND ".join(expanded_statements)
+    if violations:
+        # Make sure to start this part of the query correctly
+        if not where_statements:
+            query += " WHERE "
+        else:
+            query += " AND "
+        # For each *_meta column, add LIKE filters for the violation levels
+        meta_cols = [x for x in select if x.endswith("_meta")]
+        meta_filters = []
+        for m in meta_cols:
+            likes = []
+            for v in violations:
+                likes.append(f'{m} LIKE \'%"level": "{v}"%\'')
+            meta_filters.append("(" + " OR ".join(likes) + ")")
+        query += " AND ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
     if limit > 0:
         query += f" LIMIT {limit}"
+    logging.error(query)
     query = sql_text(query)
     for k, v in const_dict.items():
         if isinstance(v, list):
@@ -138,7 +156,7 @@ def get_sql_tables():
     return [x["name"] for x in res]
 
 
-def get_table(table):
+def get_table(table, hide_meta=True):
     """Get the SQL table for the Flask app."""
     if table not in get_sql_tables():
         return abort(422, f"'{table}' is not a valid table in the database")
@@ -175,9 +193,11 @@ def get_table(table):
                 f"The following column(s) do not exist in '{table}' table: "
                 + ", ".join(invalid_cols),
             )
-        select = ", ".join(select_cols)
+        if hide_meta:
+            # Add any necessary meta cols, since they don't appear in select filters
+            select_cols.extend([f"{x}_meta" for x in select_cols if f"{x}_meta" in table_cols])
     else:
-        select = "*"
+        select_cols = ["*"]
 
     where_statements = []
     for tc in table_cols:
@@ -191,9 +211,24 @@ def get_table(table):
     if order:
         order_by = get_order_by(order)
 
+    violations = request.args.get("violations")
+    if violations:
+        violations = violations.split(",")
+        for v in violations:
+            if v not in ["debug", "info", "warn", "error"]:
+                return abort(
+                    422,
+                    f"'violations' contains invalid level '{v}' - must be one of: debug, info, warn, error",
+                )
+
     # Build & execute the query
     results = exec_query(
-        table, select, where_statements=where_statements, order_by=order_by, limit=limit
+        table,
+        select_cols,
+        where_statements=where_statements,
+        order_by=order_by,
+        violations=violations,
+        limit=limit,
     )
 
     # Return results based on format
@@ -263,14 +298,65 @@ def get_where(where, column):
     return statement + f"{column} {query_op}", constraint
 
 
-def render_html(results, table, columns, request_args):
+def render_html(results, table, columns, request_args, hide_meta=True):
     """Render the results as an HTML table."""
     header_names = list(results.keys())
-    results = list(results)
+    if hide_meta:
+        # exclude *_meta columns from display and use the values to render cell styles
+        meta_names = [x for x in header_names if x.endswith("_meta")]
+        header_names = [x for x in header_names if x not in meta_names]
+        # also update columns for selections
+        columns = [x for x in columns if not x.endswith("_meta")]
+        # iter through results and update
+        res_updated = []
+        for res in results:
+            res = {k: {"value": v, "style": None, "message": None} for k, v in dict(res).items()}
+            for m in meta_names:
+                meta = res[m]["value"]
+                del res[m]
+                if not meta:
+                    continue
+                data = json.loads(meta[5:-1])
+                value_col = m[:-5]
+                # Set the value to what is given in the JSON (as "value")
+                res[value_col]["value"] = data["value"]
+                if "nulltype" in data:
+                    # Set null style and go to next
+                    res[value_col]["style"] = "null"
+                    continue
+                # Use a number for violation level to make sure the "worst" violation is displayed
+                violation_level = -1
+                messages = []
+                if "messages" in data:
+                    for msg in data["messages"]:
+                        lvl = msg["level"]
+                        messages.append(lvl.upper() + ": " + msg["message"])
+                        if lvl == "error":
+                            violation_level = 3
+                        elif lvl == "warn" and violation_level < 3:
+                            violation_level = 2
+                        elif lvl == "info" and violation_level < 2:
+                            violation_level = 1
+                        elif lvl == "debug" and violation_level < 1:
+                            violation_level = 0
+                # Set cell style based on violation level
+                if violation_level == 0:
+                    res[value_col]["style"] = "debug"
+                elif violation_level == 1:
+                    res[value_col]["style"] = "info"
+                elif violation_level == 2:
+                    res[value_col]["style"] = "warn"
+                elif violation_level == 3:
+                    res[value_col]["style"] = "error"
+                # Join multiple messages with line breaks
+                res[value_col]["message"] = "\n".join(messages)
+            res_updated.append(list(res.values()))
+        results = res_updated
+    else:
+        # No styles or tooltip messages
+        results = [{"value": x, "style": None, "message": None} for x in list(results)]
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
-    if limit > len(results):
-        limit = len(results)
 
     # Set the options for the "results per page" drop down
     options = []
@@ -298,20 +384,24 @@ def render_html(results, table, columns, request_args):
         cur_options[opt]["selected"] = True
         headers[h] = {"options": cur_options, "const": val}
 
+    # Set the options for violation filtering
+    violations = request_args.get("violations", "").split(",")
+
     # Get URLs for "previous" and "next" links
     url = "./" + table
     prev_url = None
     if offset > 0:
         # Only include "previous" link if we aren't at the beginning
         prev_args = request_args.copy()
-        prev_offset = limit - offset
-        if prev_offset > 0:
+        prev_offset = offset - limit
+        if prev_offset < 0:
             prev_offset = 0
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items()]
         prev_url = url + "?" + "&".join(prev_query)
     # TODO: no way to know if we have next set of results, unless we query all each time
     #       querying with a limit is faster so this would be a performance hit
+    #       we need a way to know the *total* results w/o limit
     next_args = request_args.copy()
     next_args["offset"] = limit + offset
     next_query = [f"{k}={v}" for k, v in next_args.items()]
@@ -325,6 +415,7 @@ def render_html(results, table, columns, request_args):
         select=columns,
         options=options,
         headers=headers,
+        violations=violations,
         rows=results[offset:],
         offset=offset,
         limit=limit,

@@ -18,6 +18,18 @@ sprocket database.db
 
 This will start the server on `localhost:5000`.
 
+## Testing
+
+To run a test version of `sprocket`, use the SQL file at `tests/resources/test.sql` to generate a new database:
+```bash
+sqlite3 test.db < tests/resources/test.sql
+```
+
+Then start the `sprocket` server with the default table set to `test1`:
+```bash
+sprocket test.db -t test
+```
+
 ## Command Line Options
 
 ### Default table

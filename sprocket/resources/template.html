@@ -4,7 +4,34 @@
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet">
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
-
+	<style>
+		.bg-debug {
+			background-color: #abc4ff !important;
+		}
+		.bg-error {
+			background-color: #ffabab !important;
+		}
+		.bg-info {
+			background-color: #fff8ab !important;
+		}
+		.bg-null {
+			background-color: #ededed !important;
+		}
+		.bg-warn {
+			background-color: #ffcdab !important;
+		}
+		.inner-btn {
+			margin-top: -11px;
+			margin-left: -3px;
+		}
+		.sm-btn {
+			height: 18px;
+			width: 30px;
+		}
+		.tooltip-inner {
+			white-space: pre-wrap;
+		}
+	</style>
 </head>
 <body>
 	<div class="row" style="padding:10px;">
@@ -68,8 +95,49 @@
 								</div>
 								<div class="col-auto">
 									<div class="row">
+										<p class="lead">Filter violations</p>
+										<div class="row">
+											<div class="col-md-6">
+												<div class="form-check">
+													{% if "debug" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug">
+													{% endif %}
+													<label class="form-check-label" for="debug">debug</label>
+												</div>
+												<div class="form-check">
+													{% if "warn" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn">
+													{% endif %}
+													<label class="form-check-label" for="warn">warn</label>
+												</div>
+											</div>
+											<div class="col-md-6">
+												<div class="form-check">
+													{% if "info" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info">
+													{% endif %}
+													<label class="form-check-label" for="info">info</label>
+												</div>
+												<div class="form-check">
+													{% if "error" in violations %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error" checked>
+													{% else %}
+													<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error">
+													{% endif %}
+													<label class="form-check-label" for="error">error</label>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="row" style="padding-top: 20px;">
 										<div class="col-auto">
-											<label for="limit" class="col-form-label" style="margin-left:20px;">Results per page</label>
+											<label for="limitValue" class="col-form-label">Results per page</label>
 										</div>
 										<div class="col-auto">
 											<select class="form-select" id="limitValue" name="limit">
@@ -77,7 +145,7 @@
 											</select>
 										</div>
 									</div>
-									<div class="row float-end" style="padding-top:20px;">
+									<div class="row" style="padding-top:20px;">
 										<div class="col-auto">
 											<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
 										</div>
@@ -94,7 +162,7 @@
 		</div>
 	</div>
 
-	<table class="table">
+	<table class="table" id="sqlTable">
 		<thead>
 			<tr>
 				{% for th in headers %}
@@ -116,11 +184,28 @@
 			</tr>
 		</thead>
 		<tbody>
+			{% set vars = {'row_num': 0} %}
 			{% for row in rows %}
-			<tr>
+			{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
+			<tr id="row{{ vars.row_num }}">
+				{% set inner_vars = {'cell_num': 0} %}
 				{% for itm in row %}
+				{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 				{% if itm %}
-				<td>{{ itm }}</td>
+					{% if itm["style"] and itm["message"] %}
+						<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+							<div class="row justify-content-between">
+								<div class="col-auto">{{ itm["value"] }}</div>
+								<div class="col-auto">
+									<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+								</div>
+							</div>
+						</td>
+					{% elif itm["style"] %}
+						<td class="bg-{{ itm['style'] }}">{{ itm["value"] }}</td>
+					{% else %}
+						<td>{{ itm["value"] }}</td>
+					{% endif %}
 				{% else %}
 				<td></td>
 				{% endif %}
@@ -132,7 +217,11 @@
 
 	<div class="row" style="padding-left:10px; padding-right:10px;">
 		<div class="col">
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }}</p>
+			{% if (limit + offset) > (rows|length + offset) %}
+				<p class="fst-italic">Showing results {{ offset + 1 }}-{{ rows|length + offset }}</p>
+			{% else %}
+				<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }}</p>
+			{% endif %}
 		</div>
 		<div class="col">
 			<div class="float-end">
@@ -150,11 +239,61 @@
 	</div>
 
 	<script>
+		// Enable tooltips
+		var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+		var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+		  return new bootstrap.Tooltip(tooltipTriggerEl)
+		})
+
 		// Init headers
 		var headers = [];
 		{% for h in headers %}
 		headers.push('{{ h }}');
 		{% endfor %}
+
+		function condense(level, msg, rowNum, cellNum) {
+			document.getElementById(`expandedRow${rowNum}`).remove();
+
+			// Add tooltip
+			var td = document.getElementById(`td${rowNum}-${cellNum}`);
+			td.setAttribute("data-bs-toggle", "tooltip");
+			td.setAttribute("data-bs-placement", "bottom");
+			td.setAttribute("data-bs-original-title", msg);
+			td.setAttribute("title", msg);
+
+			// Update btn
+			var btn = document.getElementById(`expand${rowNum}`);
+			btn.href = `javascript:expand('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+			var txt = document.getElementById(`expandInner${rowNum}`);
+			txt.innerText = "+";
+		}
+
+		function expand(level, msg, rowNum, cellNum) {
+			var row = document.getElementById(`row${rowNum}`);
+			var newHtml = `<tr id="expandedRow${rowNum}">`;
+			for (i=0; i < cellNum - 1; i++) {
+				newHtml += "<td></td>";
+			}
+			newHtml += `<td>${level.toUpperCase()}: ${msg}</td>`
+			row.insertAdjacentHTML('afterend', newHtml);
+
+			// Remove tooltip
+			var td = document.getElementById(`td${rowNum}-${cellNum}`);
+			var tooltipID = td.getAttribute("aria-describedby");
+			td.removeAttribute("data-bs-toggle");
+			td.removeAttribute("data-bs-placement");
+			td.removeAttribute("data-bs-original-title");
+			td.removeAttribute("title");
+			td.removeAttribute("aria-describedby");
+			var tt = document.getElementById(tooltipID);
+			tt.remove();
+
+			// Update btn
+			var btn = document.getElementById(`expand${rowNum}`);
+			btn.href = `javascript:condense('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+			var txt = document.getElementById(`expandInner${rowNum}`);
+			txt.innerText = "-";
+		}
 
 		function reset() {
 			var url = window.location.href.split('?')[0];
@@ -213,6 +352,19 @@
 			}
 			if (s.length > 0) {
 				args.push("select=" + s.join(","));
+			}
+
+			// Get the violation filters
+			var n = document.getElementsByName('violation[]');
+			var v = [];
+			for (i=0;i < (n.length); i++) {
+				console.log(n[i].checked);
+				if (n[i].checked) {
+					v.push(n[i].value);
+				}
+			}
+			if (v.length > 0) {
+				args.push("violations=" + v.join(","));
 			}
 
 			// Get the limit option
