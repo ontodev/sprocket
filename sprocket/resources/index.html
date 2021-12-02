@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container">
+    <div class="row" style="padding-top:10px;">
+        <h3>Select a table:</h3>
+        <ul>
+            {% for t in tables %}
+            <li><a href="/{{ t }}">{{ t }}</a></li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+{% endblock %}
