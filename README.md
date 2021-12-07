@@ -23,6 +23,8 @@ Alternatively, you can provide the URL to a PostGRES Swagger endpoint, such as h
 sprocket https://www.cmi-pb.org/api/v2
 ```
 
+The first time we send a request to the API for a given table, `sprocket` will store some details in a cache directory `.swagger`. This includes all column names in the table and total results. For large datasets, the first time you load the table may take a little bit longer. The cache is removed when `sprocket` exits, but if you wish to keep it to speed up the results for future runs, you can do so by including the `-s`/`--save-cache` flag. This should not be used if the data in the database is changing between runs.
+
 ## Testing
 
 To run a test version of `sprocket`, use the SQL file at `tests/resources/test.sql` to generate a new database:

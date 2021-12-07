@@ -2,8 +2,10 @@ import csv
 import json
 import os
 import requests
+import shutil
 
 from argparse import ArgumentParser
+from collections import defaultdict
 from copy import deepcopy
 from configparser import ConfigParser
 from flask import abort, Flask, render_template, request, Response
@@ -16,7 +18,6 @@ from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
-import logging
 
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
@@ -39,6 +40,7 @@ FILTER_OPTS = {
     "in": {"label": "in"},
     "not.in": {"label": "not in"},
 }
+SWAGGER_CACHE = ".swagger"
 
 
 @app.route("/<table>", methods=["GET"])
@@ -159,6 +161,57 @@ def get_sql_tables():
     return [x["name"] for x in res]
 
 
+def get_swagger_details(table, data, get_all_columns=False):
+    """Get a list of columns for a table from Swagger, checking first if we've cached the columns."""
+    # Check for columns in the cache file
+    table_columns = defaultdict(list)
+    columns_file = os.path.join(SWAGGER_CACHE, "columns.tsv")
+    if os.path.exists(columns_file):
+        with open(columns_file, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                if row[0] not in table_columns:
+                    table_columns[row[0]] = list()
+                table_columns[row[0]].append(row[1])
+    columns = table_columns.get(table)
+
+    total = None
+    totals_file = os.path.join(SWAGGER_CACHE, "totals.tsv")
+    totals_rows = []
+    if os.path.exists(totals_file):
+        with open(totals_file, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                totals_rows.append(row)
+                if row[0] == table:
+                    total = int(row[1])
+
+    if not columns or total is None:
+        if get_all_columns or total is None:
+            # We need to send another request to get all columns if a select statement is used
+            r = requests.get(f"{DB}/{table}?limit=1", headers={"Prefer": "count=exact"}, verify=False)
+            data2 = r.json()[0]
+            columns = list(data2.keys())
+            total = int(r.headers["Content-Range"].split("/")[1])
+        else:
+            # We already have the total and we have all the columns in the data - no need to hit API
+            columns = list(data[0].keys())
+        # Save updated cache file so we don't have to request again
+        table_columns[table] = columns
+        columns_rows = []
+        for table, columns in table_columns.items():
+            for col in columns:
+                columns_rows.append([table, col])
+        with open(columns_file, "w") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            writer.writerows(columns_rows)
+        with open(totals_file, "w") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            writer.writerows(totals_rows)
+
+    return columns, total
+
+
 def get_swagger_tables():
     # TODO: error handling
     r = requests.get(DB, verify=False)
@@ -256,26 +309,40 @@ def get_table_from_database(table, hide_meta=True):
     return Response(output.getvalue(), mimetype=mt)
 
 
+def get_swagger_total(table):
+    fname = os.path.join(SWAGGER_CACHE, "totals.tsv")
+    total = None
+    if os.path.exists(fname):
+        with open(fname, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                if row[0] == table:
+                    total = int(row[1])
+    if not total:
+        pass
+
+
 def get_table_from_swagger(table):
+    if not os.path.exists(SWAGGER_CACHE):
+        os.mkdir(SWAGGER_CACHE)
+
     # Create a URL to get JSON from
     url = DB + "/" + table
     request_args = []
     get_all_columns = False
 
-    # Defaults for non-included args
-    limit = 100
-    offset = 0
+    # Parse args and create request
     violations = []
     fmt = None
+    limit = 100
+    offset = 0
     for arg, value in request.args.items():
         if arg == "select":
             get_all_columns = True
         if arg == "limit":
             limit = int(value)
-            continue
         if arg == "offset":
             offset = int(value)
-            continue
         if arg == "violations":
             violations = value.split(",")
             continue
@@ -284,12 +351,24 @@ def get_table_from_swagger(table):
             continue
         request_args.append(f"{arg}={value}")
 
+    # Send request and get data + total rows
     if request_args:
         url += "?" + "&".join(request_args)
     r = requests.get(url, verify=False)
     data = r.json()
 
+    # Error from API
+    if type(data) == dict:
+        if data.get("message") and data.get("details"):
+            msg = data["message"]
+            details = data["details"]
+        else:
+            msg = "Unable to complete query"
+            details = "Please revise query and try again."
+        return render_template("base.html", default=f"<div class='container'><h2>{msg}</h2><p>{details}</p></div>")
+
     if fmt:
+        # Save to TSV or CSV, just returning that response
         headers = data[0].keys()
         output = StringIO()
         sep = "\t"
@@ -299,26 +378,8 @@ def get_table_from_swagger(table):
             mt = "text/comma-separated-values"
         writer = csv.DictWriter(output, delimiter=sep, fieldnames=list(headers), lineterminator="\n")
         writer.writeheader()
-        writer.writerows(list(data)[offset: limit + offset])
+        writer.writerows(list(data))
         return Response(output.getvalue(), mimetype=mt)
-
-    columns = os.environ.get("SPROCKET_COLUMNS")
-    if get_all_columns:
-        # We need to send another request to get all columns if a select statement is used
-        # We will cache this in an environment variable and remove it when the process exits
-        if not columns:
-            r = requests.get(url + "?limit=1", verify=False)
-            data2 = r.json()[0]
-            columns = data2.keys()
-            os.environ["SPROCKET_COLUMNS"] = ",".join(columns)
-        else:
-            columns = columns.split(",")
-    else:
-        if not columns:
-            columns = data[0].keys()
-            os.environ["SPROCKET_COLUMNS"] = ",".join(columns)
-        else:
-            columns = columns.split(",")
 
     # Set the options for filtering
     header_names = data[0].keys()
@@ -334,8 +395,10 @@ def get_table_from_swagger(table):
         cur_options[opt]["selected"] = True
         headers[h] = {"options": cur_options, "const": val}
 
-    total = len(data)
-    data = [list(x.values()) for x in data[offset: limit + offset]]
+    # Get all columns for select
+    columns, total = get_swagger_details(table, data, get_all_columns)
+
+    data = [list(x.values()) for x in data]
     results = []
     for d in data:
         results.append([{"value": x, "style": None, "message": None} for x in d])
@@ -565,6 +628,7 @@ def main():
     parser.add_argument("db")
     parser.add_argument("-t", "--table", help="Default table to show")
     parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
+    parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
     args = parser.parse_args()
     DB = args.db
     if not DB:
@@ -630,8 +694,9 @@ def main():
         else:
             app.run()
     finally:
-        # Remove our tracked columns
-        os.unsetenv("SPROCKET_COLUMNS")
+        # Remove our tracked data from Swagger
+        if not args.save_cache and os.path.exists(SWAGGER_CACHE):
+            shutil.rmtree(SWAGGER_CACHE)
 
 
 if __name__ == "__main__":
