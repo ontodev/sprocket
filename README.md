@@ -18,7 +18,7 @@ sprocket database.db
 
 This will start the server on `localhost:5000`.
 
-Alternatively, you can provide the URL to a PostGRES Swagger endpoint, such as https://www.cmi-pb.org/api/v2. Each request will be sent to the endpoint and the JSON results will be displayed as the same HTML table as providing a database.
+Alternatively, you can provide the URL to a [PostgREST OpenAPI](https://postgrest.org/en/v9.0/api.html#openapi-support) (aka Swagger) endpoint, such as https://www.cmi-pb.org/api/v2. Each request will be sent to the endpoint and the JSON results will be displayed as the same HTML table as providing a database.
 ```bash
 sprocket https://www.cmi-pb.org/api/v2
 ```

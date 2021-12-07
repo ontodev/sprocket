@@ -189,7 +189,7 @@ def get_swagger_details(table, data, get_all_columns=False):
     if not columns or total is None:
         if get_all_columns or total is None:
             # We need to send another request to get all columns if a select statement is used
-            r = requests.get(f"{DB}/{table}?limit=1", headers={"Prefer": "count=exact"}, verify=False)
+            r = requests.get(f"{DB}/{table}?limit=1", headers={"Prefer": "count=estimated"}, verify=False)
             data2 = r.json()[0]
             columns = list(data2.keys())
             total = int(r.headers["Content-Range"].split("/")[1])
