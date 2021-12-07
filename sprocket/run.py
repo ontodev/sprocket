@@ -1,8 +1,11 @@
 import csv
 import json
 import os
+import requests
+import shutil
 
 from argparse import ArgumentParser
+from collections import defaultdict
 from copy import deepcopy
 from configparser import ConfigParser
 from flask import abort, Flask, render_template, request, Response
@@ -15,7 +18,6 @@ from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
-import logging
 
 app = Flask(
     __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
@@ -38,14 +40,20 @@ FILTER_OPTS = {
     "in": {"label": "in"},
     "not.in": {"label": "not in"},
 }
+SWAGGER_CACHE = ".swagger"
 
 
 @app.route("/<table>", methods=["GET"])
 def get_table_by_name(table):
-    return get_table(table)
+    if table == "favicon.ico":
+        return render_template("base.html")
+    if CONN:
+        return get_table_from_database(table)
+    else:
+        return get_table_from_swagger(table)
 
 
-def exec_query(table, select, where_statements=None, order_by=None, violations=None, limit=100):
+def exec_query(table, select, where_statements=None, order_by=None, violations=None):
     """Create a query from, minimally, a table name and a select statement."""
     query = f"SELECT {', '.join(select)} FROM {table}"
     const_dict = {}
@@ -80,9 +88,6 @@ def exec_query(table, select, where_statements=None, order_by=None, violations=N
         query += " AND ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
-    if limit > 0:
-        query += f" LIMIT {limit}"
-    logging.error(query)
     query = sql_text(query)
     for k, v in const_dict.items():
         if isinstance(v, list):
@@ -156,7 +161,65 @@ def get_sql_tables():
     return [x["name"] for x in res]
 
 
-def get_table(table, hide_meta=True):
+def get_swagger_details(table, data, get_all_columns=False):
+    """Get a list of columns for a table from Swagger, checking first if we've cached the columns."""
+    # Check for columns in the cache file
+    table_columns = defaultdict(list)
+    columns_file = os.path.join(SWAGGER_CACHE, "columns.tsv")
+    if os.path.exists(columns_file):
+        with open(columns_file, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                if row[0] not in table_columns:
+                    table_columns[row[0]] = list()
+                table_columns[row[0]].append(row[1])
+    columns = table_columns.get(table)
+
+    total = None
+    totals_file = os.path.join(SWAGGER_CACHE, "totals.tsv")
+    totals_rows = []
+    if os.path.exists(totals_file):
+        with open(totals_file, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                totals_rows.append(row)
+                if row[0] == table:
+                    total = int(row[1])
+
+    if not columns or total is None:
+        if get_all_columns or total is None:
+            # We need to send another request to get all columns if a select statement is used
+            r = requests.get(f"{DB}/{table}?limit=1", headers={"Prefer": "count=estimated"}, verify=False)
+            data2 = r.json()[0]
+            columns = list(data2.keys())
+            total = int(r.headers["Content-Range"].split("/")[1])
+        else:
+            # We already have the total and we have all the columns in the data - no need to hit API
+            columns = list(data[0].keys())
+        # Save updated cache file so we don't have to request again
+        table_columns[table] = columns
+        columns_rows = []
+        for table, columns in table_columns.items():
+            for col in columns:
+                columns_rows.append([table, col])
+        with open(columns_file, "w") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            writer.writerows(columns_rows)
+        with open(totals_file, "w") as f:
+            writer = csv.writer(f, delimiter="\t", lineterminator="\n")
+            writer.writerows(totals_rows)
+
+    return columns, total
+
+
+def get_swagger_tables():
+    # TODO: error handling
+    r = requests.get(DB, verify=False)
+    data = r.json()
+    return [p[1:] for p in data["paths"].keys() if p != "/"]
+
+
+def get_table_from_database(table, hide_meta=True):
     """Get the SQL table for the Flask app."""
     if table not in get_sql_tables():
         return abort(422, f"'{table}' is not a valid table in the database")
@@ -228,7 +291,6 @@ def get_table(table, hide_meta=True):
         where_statements=where_statements,
         order_by=order_by,
         violations=violations,
-        limit=limit,
     )
 
     # Return results based on format
@@ -243,8 +305,133 @@ def get_table(table, hide_meta=True):
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results)[offset:])
+    writer.writerows(list(results)[offset : limit + offset])
     return Response(output.getvalue(), mimetype=mt)
+
+
+def get_swagger_total(table):
+    fname = os.path.join(SWAGGER_CACHE, "totals.tsv")
+    total = None
+    if os.path.exists(fname):
+        with open(fname, "r") as f:
+            reader = csv.reader(f, delimiter="\t")
+            for row in reader:
+                if row[0] == table:
+                    total = int(row[1])
+    if not total:
+        pass
+
+
+def get_table_from_swagger(table):
+    if not os.path.exists(SWAGGER_CACHE):
+        os.mkdir(SWAGGER_CACHE)
+
+    # Create a URL to get JSON from
+    url = DB + "/" + table
+    request_args = []
+    get_all_columns = False
+
+    # Parse args and create request
+    violations = []
+    fmt = None
+    limit = 100
+    offset = 0
+    for arg, value in request.args.items():
+        if arg == "select":
+            get_all_columns = True
+        if arg == "limit":
+            limit = int(value)
+        if arg == "offset":
+            offset = int(value)
+        if arg == "violations":
+            violations = value.split(",")
+            continue
+        if arg == "format":
+            fmt = value
+            continue
+        request_args.append(f"{arg}={value}")
+
+    # Send request and get data + total rows
+    if request_args:
+        url += "?" + "&".join(request_args)
+    r = requests.get(url, verify=False)
+    data = r.json()
+
+    # Error from API
+    if type(data) == dict:
+        if data.get("message") and data.get("details"):
+            msg = data["message"]
+            details = data["details"]
+        else:
+            msg = "Unable to complete query"
+            details = "Please revise query and try again."
+        return render_template("base.html", default=f"<div class='container'><h2>{msg}</h2><p>{details}</p></div>")
+
+    if fmt:
+        # Save to TSV or CSV, just returning that response
+        headers = data[0].keys()
+        output = StringIO()
+        sep = "\t"
+        mt = "text/tab-separated-values"
+        if fmt == "csv":
+            sep = ","
+            mt = "text/comma-separated-values"
+        writer = csv.DictWriter(output, delimiter=sep, fieldnames=list(headers), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(list(data))
+        return Response(output.getvalue(), mimetype=mt)
+
+    # Set the options for filtering
+    header_names = data[0].keys()
+    headers = {}
+    for h in header_names:
+        fltr = request.args.get(h)
+        if not fltr:
+            headers[h] = {"options": FILTER_OPTS, "has_selected": False}
+            continue
+        cur_options = deepcopy(FILTER_OPTS)
+        opt = fltr.rsplit(".", 1)[0]
+        val = fltr.rsplit(".", 1)[1]
+        cur_options[opt]["selected"] = True
+        headers[h] = {"options": cur_options, "const": val}
+
+    # Get all columns for select
+    columns, total = get_swagger_details(table, data, get_all_columns)
+
+    data = [list(x.values()) for x in data]
+    results = []
+    for d in data:
+        results.append([{"value": x, "style": None, "message": None} for x in d])
+
+    # Set the options for the "results per page" drop down
+    options = []
+    limit_vals = [10, 50, 100, 500]
+    if limit not in limit_vals:
+        limit_vals.append(limit)
+    limit_vals = sorted(limit_vals)
+    for lv in limit_vals:
+        # Make sure the 'selected' value is our current limit
+        if lv == limit:
+            options.append(f'<option value="{lv}" selected>{lv}</option>')
+        else:
+            options.append(f'<option value="{lv}">{lv}</option>')
+
+    prev_url, next_url, this_url = get_urls(table, request.args, total, offset=offset, limit=limit)
+
+    return render_template(
+        "table.html",
+        select=columns,
+        options=options,
+        headers=headers,
+        violations=violations,
+        rows=results,
+        offset=offset,
+        total=total,
+        limit=limit,
+        this_url=this_url,
+        prev_url=prev_url,
+        next_url=next_url,
+    )
 
 
 def get_where(where, column):
@@ -355,8 +542,11 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     else:
         # No styles or tooltip messages
         results = [{"value": x, "style": None, "message": None} for x in list(results)]
+
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", "100"))
+    total = len(results)
+    results = list(results)[offset: limit + offset]
 
     # Set the options for the "results per page" drop down
     options = []
@@ -387,9 +577,29 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     # Set the options for violation filtering
     violations = request_args.get("violations", "").split(",")
 
+    prev_url, next_url, this_url = get_urls(table, request_args, total, offset=offset, limit=limit)
+
+    return render_template(
+        "table.html",
+        select=columns,
+        options=options,
+        headers=headers,
+        violations=violations,
+        rows=results,
+        offset=offset,
+        total=total,
+        limit=limit,
+        this_url=this_url,
+        prev_url=prev_url,
+        next_url=next_url,
+    )
+
+
+def get_urls(table, request_args, total_results, offset=0, limit=100):
     # Get URLs for "previous" and "next" links
     url = "./" + table
     prev_url = None
+    next_url = None
     if offset > 0:
         # Only include "previous" link if we aren't at the beginning
         prev_args = request_args.copy()
@@ -399,30 +609,17 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items()]
         prev_url = url + "?" + "&".join(prev_query)
-    # TODO: no way to know if we have next set of results, unless we query all each time
-    #       querying with a limit is faster so this would be a performance hit
-    #       we need a way to know the *total* results w/o limit
-    next_args = request_args.copy()
-    next_args["offset"] = limit + offset
-    next_query = [f"{k}={v}" for k, v in next_args.items()]
-    next_url = url + "?" + "&".join(next_query)
+    if limit + offset < total_results:
+        # Only include "next" link if we aren't at the end
+        next_args = request_args.copy()
+        next_args["offset"] = limit + offset
+        next_query = [f"{k}={v}" for k, v in next_args.items()]
+        next_url = url + "?" + "&".join(next_query)
 
     # Current URL is used for download links
     this_url = url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
 
-    return render_template(
-        "template.html",
-        select=columns,
-        options=options,
-        headers=headers,
-        violations=violations,
-        rows=results[offset:],
-        offset=offset,
-        limit=limit,
-        this_url=this_url,
-        prev_url=prev_url,
-        next_url=next_url,
-    )
+    return prev_url, next_url, this_url
 
 
 def main():
@@ -431,6 +628,7 @@ def main():
     parser.add_argument("db")
     parser.add_argument("-t", "--table", help="Default table to show")
     parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
+    parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
     args = parser.parse_args()
     DB = args.db
     if not DB:
@@ -471,22 +669,34 @@ def main():
         db_url = f"postgresql+psycopg2://{pg_user}:{pg_pw}@{pg_host}:{pg_port}/{pg_db}"
         engine = create_engine(db_url)
         CONN = engine.connect()
-    else:
-        raise ValueError(
-            "Either a database file or a config file must be specified with a .db or .ini extension"
-        )
+    # else:
+        # raise ValueError(
+        # "Either a database file or a config file must be specified with a .db or .ini extension"
+        # )
 
     # Maybe set the base route to provided default table
     if args.table:
-
         @app.route("/", methods=["GET"])
         def get_default_table():
-            return get_table(args.table)
-
-    if args.cgi:
-        CGIHandler().run(app)
+            return get_table_from_database(args.table)
     else:
-        app.run()
+        @app.route("/", methods=["GET"])
+        def show_tables():
+            if CONN:
+                tables = get_sql_tables()
+            else:
+                tables = get_swagger_tables()
+            return render_template("index.html", tables=tables)
+
+    try:
+        if args.cgi:
+            CGIHandler().run(app)
+        else:
+            app.run()
+    finally:
+        # Remove our tracked data from Swagger
+        if not args.save_cache and os.path.exists(SWAGGER_CACHE):
+            shutil.rmtree(SWAGGER_CACHE)
 
 
 if __name__ == "__main__":
