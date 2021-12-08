@@ -32,6 +32,9 @@
 			white-space: pre-wrap;
 		}
 	</style>
+	{% if title %}
+	<title>{{ title }}</title>
+	{% endif %}
 </head>
 <body>
 	{% block content %}
