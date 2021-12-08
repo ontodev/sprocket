@@ -46,6 +46,13 @@ When running `sprocket` with no additional arguments, the base path (`/`) will n
 sprocket database.db -t tablename
 ```
 
+### Limits
+
+`sprocket` will show 100 results per page by default when you first view a table. This can always be changed using the HTML form or the `limit` query parameter, but if you wish to change the default you can do so with `-l`/`--limit`. For example, to always show 20 results when viewing a table:
+```bash
+sprocket database.db -l 20
+```
+
 ### CGI script
 
 You can also run `sprocket` as a CGI script using the `-c`/`--cgi` flag. For example, you can create a `sprocket.sh` script with the following content:
