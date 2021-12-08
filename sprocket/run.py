@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+
 import requests
 import shutil
 
@@ -26,6 +27,7 @@ app.url_map.strict_slashes = False
 
 CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
+DEFAULT_LIMIT = 100
 FILTER_OPTS = {
     "eq": {"label": "equals"},
     "gt": {"label": "greater than"},
@@ -189,7 +191,9 @@ def get_swagger_details(table, data, get_all_columns=False):
     if not columns or total is None:
         if get_all_columns or total is None:
             # We need to send another request to get all columns if a select statement is used
-            r = requests.get(f"{DB}/{table}?limit=1", headers={"Prefer": "count=estimated"}, verify=False)
+            r = requests.get(
+                f"{DB}/{table}?limit=1", headers={"Prefer": "count=estimated"}, verify=False
+            )
             data2 = r.json()[0]
             columns = list(data2.keys())
             total = int(r.headers["Content-Range"].split("/")[1])
@@ -216,7 +220,7 @@ def get_swagger_tables():
     # TODO: error handling
     r = requests.get(DB, verify=False)
     data = r.json()
-    return [p[1:] for p in data["paths"].keys() if p != "/"]
+    return [path[1:] for path, details in data["paths"].items() if path != "/" and "get" in details]
 
 
 def get_table_from_database(table, hide_meta=True):
@@ -225,7 +229,7 @@ def get_table_from_database(table, hide_meta=True):
         return abort(422, f"'{table}' is not a valid table in the database")
     table_cols = get_sql_columns(table)
 
-    limit = request.args.get("limit", "100")
+    limit = request.args.get("limit", DEFAULT_LIMIT)
     if limit.lower() == "none":
         limit = -1
     else:
@@ -334,12 +338,14 @@ def get_table_from_swagger(table):
     # Parse args and create request
     violations = []
     fmt = None
-    limit = 100
+    limit = DEFAULT_LIMIT
     offset = 0
+    has_limit = False
     for arg, value in request.args.items():
         if arg == "select":
             get_all_columns = True
         if arg == "limit":
+            has_limit = True
             limit = int(value)
         if arg == "offset":
             offset = int(value)
@@ -350,6 +356,9 @@ def get_table_from_swagger(table):
             fmt = value
             continue
         request_args.append(f"{arg}={value}")
+    if not has_limit:
+        # We always want to have the limit
+        request_args.append(f"limit={limit}")
 
     # Send request and get data + total rows
     if request_args:
@@ -365,7 +374,11 @@ def get_table_from_swagger(table):
         else:
             msg = "Unable to complete query"
             details = "Please revise query and try again."
-        return render_template("base.html", default=f"<div class='container'><h2>{msg}</h2><p>{details}</p></div>")
+        return render_template(
+            "base.html",
+            title=table,
+            default=f"<div class='container'><h2>{msg}</h2><p>{details}</p></div>",
+        )
 
     if fmt:
         # Save to TSV or CSV, just returning that response
@@ -376,7 +389,9 @@ def get_table_from_swagger(table):
         if fmt == "csv":
             sep = ","
             mt = "text/comma-separated-values"
-        writer = csv.DictWriter(output, delimiter=sep, fieldnames=list(headers), lineterminator="\n")
+        writer = csv.DictWriter(
+            output, delimiter=sep, fieldnames=list(headers), lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(list(data))
         return Response(output.getvalue(), mimetype=mt)
@@ -420,6 +435,7 @@ def get_table_from_swagger(table):
 
     return render_template(
         "table.html",
+        title=table,
         select=columns,
         options=options,
         headers=headers,
@@ -544,9 +560,9 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         results = [{"value": x, "style": None, "message": None} for x in list(results)]
 
     offset = int(request_args.get("offset", "0"))
-    limit = int(request_args.get("limit", "100"))
+    limit = int(request_args.get("limit", DEFAULT_LIMIT))
     total = len(results)
-    results = list(results)[offset: limit + offset]
+    results = list(results)[offset : limit + offset]
 
     # Set the options for the "results per page" drop down
     options = []
@@ -581,6 +597,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
 
     return render_template(
         "table.html",
+        title=table,
         select=columns,
         options=options,
         headers=headers,
@@ -595,7 +612,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
     )
 
 
-def get_urls(table, request_args, total_results, offset=0, limit=100):
+def get_urls(table, request_args, total_results, offset=0, limit=DEFAULT_LIMIT):
     # Get URLs for "previous" and "next" links
     url = "./" + table
     prev_url = None
@@ -623,13 +640,16 @@ def get_urls(table, request_args, total_results, offset=0, limit=100):
 
 
 def main():
-    global CONN, DB
+    global CONN, DB, DEFAULT_LIMIT
     parser = ArgumentParser()
     parser.add_argument("db")
     parser.add_argument("-t", "--table", help="Default table to show")
+    parser.add_argument("-l", "--limit", help="Default limit for results (default: 100)", type=int)
     parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
     parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
     args = parser.parse_args()
+    if args.limit:
+        DEFAULT_LIMIT = args.limit
     DB = args.db
     if not DB:
         raise NameError("'SPROCKET_DB' environment variable must be set")
@@ -670,23 +690,26 @@ def main():
         engine = create_engine(db_url)
         CONN = engine.connect()
     # else:
-        # raise ValueError(
-        # "Either a database file or a config file must be specified with a .db or .ini extension"
-        # )
+    # raise ValueError(
+    # "Either a database file or a config file must be specified with a .db or .ini extension"
+    # )
 
     # Maybe set the base route to provided default table
     if args.table:
+
         @app.route("/", methods=["GET"])
         def get_default_table():
             return get_table_from_database(args.table)
+
     else:
+
         @app.route("/", methods=["GET"])
         def show_tables():
             if CONN:
                 tables = get_sql_tables()
             else:
                 tables = get_swagger_tables()
-            return render_template("index.html", tables=tables)
+            return render_template("index.html", title="sprocket", tables=tables)
 
     try:
         if args.cgi:
