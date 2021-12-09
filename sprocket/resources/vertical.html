@@ -1,27 +1,58 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
-<div class="row" id="sqlTable" style="padding-bottom:5px;">
-    {% for header, value in row.items() %}
-    <div class="row border-bottom">
-        <div class="col-md-3">
-            <div class="row">
-                <div class="col-auto">
-                    <div class="dropdown">
-                        <button class="btn btn-light dropdown-toggle" type="button" id="{{ header }}Dropdown" data-bs-toggle="dropdown"> </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', false)">Ascending</a></li>
-                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', true)">Descending</a></li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="col-auto"><b>{{ header }}</b></div>
+<form method="post">
+    {% if include_edit %}
+    <div class="row d-flex justify-content-center">
+        <div class="col-md-4" style="padding-bottom:20px;">
+            <div class="d-grid gap-2">
+            <a id="editRow" class="btn btn-primary" href="javascript:edit()">
+                Edit Row
+            </a>
             </div>
         </div>
-        <div class="col-md-9">{{ value["value"]|safe }}</div>
     </div>
-    {% endfor %}
-</div>
+    {% endif %}
+    <table class="table" id="sqlTable" style="padding-bottom:5px;">
+        {% for header, value in row.items() %}
+        <tr class="border-bottom">
+            <td>
+                <div class="row">
+                    <div class="col-auto">
+                        <div class="dropdown">
+                            <button class="btn btn-light dropdown-toggle" type="button" id="{{ header }}Dropdown" data-bs-toggle="dropdown"> </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="javascript:sort('{{ header }}', false)">Ascending</a></li>
+                                <li><a class="dropdown-item" href="javascript:sort('{{ header }}', true)">Descending</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="col-auto"><b>{{ header }}</b></div>
+                </div>
+            </td>
+            <td>{{ value["value"]|safe }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+</form>
 
+<script>
+    function edit() {
+        var table = document.getElementById("sqlTable");
+        for (var i = 0, row; row = table.rows[i]; i++) {
+            var header = row.cells[0].innerText;
+            // col to display editor in
+            var col = row.cells[1];
+            var text = col.innerHTML;
+            col.innerHTML = `<input type="text" name="${header}Value" id="${header}Value" class="form-control" value="${text}"/>`;
+        }
+        var edit = document.getElementById("editRow");
+        var btn = document.createElement("button");
+        btn.setAttribute("class", "btn btn-primary");
+        btn.setAttribute("type", "submit");
+        btn.innerText = "Save Changes";
+        edit.parentNode.replaceChild(btn, edit);
+    }
+</script>
 
 {% endblock %}

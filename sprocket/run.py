@@ -45,7 +45,7 @@ FILTER_OPTS = {
 SWAGGER_CACHE = ".swagger"
 
 
-@app.route("/<table>", methods=["GET"])
+@app.route("/<table>", methods=["GET", "POST"])
 def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("base.html")
@@ -627,6 +627,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         "this_url": this_url,
         "prev_url": prev_url,
         "next_url": next_url,
+        "include_edit": True,
     }
     if limit == 1 or total == 1:
         row = {}

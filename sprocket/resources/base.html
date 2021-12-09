@@ -37,8 +37,10 @@
 	{% endif %}
 </head>
 <body>
+	<div class="container">
 	{% block content %}
 	{{ default|safe }}
 	{% endblock %}
+	</div>
 </body>
 </html>
