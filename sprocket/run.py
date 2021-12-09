@@ -57,7 +57,7 @@ def get_table_by_name(table):
 
 def exec_query(table, select, where_statements=None, order_by=None, violations=None):
     """Create a query from, minimally, a table name and a select statement."""
-    query = f"SELECT {', '.join(select)} FROM {table}"
+    query = f"SELECT {', '.join(select)} FROM '{table}'"
     const_dict = {}
     # Add keys for any where statements using user input values
     if where_statements:
@@ -143,7 +143,7 @@ def get_sql_columns(table):
     """Get a list of columns from a table."""
     # Check for required columns
     if str(CONN.engine.url).startswith("sqlite"):
-        res = CONN.execute(f"PRAGMA table_info({table})")
+        res = CONN.execute(f"PRAGMA table_info('{table}')")
     else:
         res = CONN.execute(
             f"""SELECT column_name AS name, data_type AS type FROM INFORMATION_SCHEMA.COLUMNS
@@ -230,13 +230,10 @@ def get_table_from_database(table, hide_meta=True):
     table_cols = get_sql_columns(table)
 
     limit = request.args.get("limit", DEFAULT_LIMIT)
-    if limit.lower() == "none":
-        limit = -1
-    else:
-        try:
-            limit = int(limit)
-        except ValueError:
-            return abort(422, "'limit' must be an integer or 'none'")
+    try:
+        limit = int(limit)
+    except ValueError:
+        return abort(422, "'limit' must be an integer")
 
     offset = request.args.get("offset", "0")
     try:
@@ -420,7 +417,7 @@ def get_table_from_swagger(table):
 
     # Set the options for the "results per page" drop down
     options = []
-    limit_vals = [10, 50, 100, 500]
+    limit_vals = [1, 10, 50, 100, 500, total]
     if limit not in limit_vals:
         limit_vals.append(limit)
     limit_vals = sorted(limit_vals)
@@ -446,7 +443,7 @@ def get_table_from_swagger(table):
         "prev_url": prev_url,
         "next_url": next_url,
     }
-    if limit == 1:
+    if limit == 1 or total == 1:
         row = {}
         i = 0
         for h in headers:
@@ -530,6 +527,8 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                 if not meta:
                     continue
                 data = json.loads(meta[5:-1])
+                if data.get("valid"):
+                    continue
                 value_col = m[:-5]
                 # Set the value to what is given in the JSON (as "value")
                 res[value_col]["value"] = data["value"]
@@ -576,9 +575,9 @@ def render_html(results, table, columns, request_args, hide_meta=True):
 
     # Set the options for the "results per page" drop down
     options = []
-    limit_vals = [10, 50, 100, 500]
+    limit_vals = {1, 10, 50, 100, 500, total}
     if limit not in limit_vals:
-        limit_vals.append(limit)
+        limit_vals.add(limit)
     limit_vals = sorted(limit_vals)
     for lv in limit_vals:
         # Make sure the 'selected' value is our current limit
@@ -611,13 +610,14 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         "options": options,
         "violations": violations,
         "offset": offset,
+        "headers": headers,
         "total": total,
         "limit": limit,
         "this_url": this_url,
         "prev_url": prev_url,
         "next_url": next_url,
     }
-    if limit == 1:
+    if limit == 1 or total == 1:
         row = {}
         i = 0
         for h in headers:
