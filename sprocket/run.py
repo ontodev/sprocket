@@ -155,10 +155,13 @@ def get_sql_columns(table):
 def get_sql_tables():
     """Get a list of tables from a database. Taken from ontodev-gizmos."""
     if str(CONN.engine.url).startswith("sqlite"):
-        res = CONN.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        res = CONN.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%_conflict';"
+        )
     else:
         res = CONN.execute(
-            "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public'"
+            """SELECT table_name AS name FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_name NOT LIKE '%_conflict';"""
         )
     return [x["name"] for x in res]
 
@@ -522,13 +525,18 @@ def render_html(results, table, columns, request_args, hide_meta=True):
         for res in results:
             res = {k: {"value": v, "style": None, "message": None} for k, v in dict(res).items()}
             for m in meta_names:
+                # Get the metadata as JSON
                 meta = res[m]["value"]
                 del res[m]
                 if not meta:
                     continue
                 data = json.loads(meta[5:-1])
-                if data.get("valid"):
+
+                if data.get("valid") and not data.get("nulltype"):
+                    # Cell is not a null & is valid, nothing to style or change
                     continue
+
+                # This is the name of the column we are editing
                 value_col = m[:-5]
                 # Set the value to what is given in the JSON (as "value")
                 res[value_col]["value"] = data["value"]
@@ -536,6 +544,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     # Set null style and go to next
                     res[value_col]["style"] = "null"
                     continue
+
                 # Use a number for violation level to make sure the "worst" violation is displayed
                 violation_level = -1
                 messages = []
@@ -551,6 +560,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                             violation_level = 1
                         elif lvl == "debug" and violation_level < 1:
                             violation_level = 0
+
                 # Set cell style based on violation level
                 if violation_level == 0:
                     res[value_col]["style"] = "debug"
@@ -560,6 +570,7 @@ def render_html(results, table, columns, request_args, hide_meta=True):
                     res[value_col]["style"] = "warn"
                 elif violation_level == 3:
                     res[value_col]["style"] = "error"
+
                 # Join multiple messages with line breaks
                 res[value_col]["message"] = "\n".join(messages)
             res_updated.append(list(res.values()))
