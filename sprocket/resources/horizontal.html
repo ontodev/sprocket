@@ -1,0 +1,61 @@
+{% extends "table.html" %}
+{% block subcontent %}
+
+<table class="table" id="sqlTable">
+	<thead>
+		<tr>
+			<th/>
+			{% for th in headers %}
+			<th>
+				<div class="row justify-content-between">
+					<div class="col-auto">{{ th }}</div>
+					<div class="col-auto">
+						<div class="dropdown">
+							<button class="btn btn-light dropdown-toggle" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"> </button>
+							<ul class="dropdown-menu">
+								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
+								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
+							</ul>
+						</div>
+					</div>
+				</div>
+			</th>
+			{% endfor %}
+		</tr>
+	</thead>
+	<tbody>
+		{% set vars = {'row_num': 0} %}
+		{% for row in rows %}
+		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
+		<tr id="row{{ vars.row_num }}">
+			{% set inner_vars = {'cell_num': 0} %}
+			<td>
+				<a class="btn btn-light sm-btn" type="button" id="vert{{ vars.row_num }}" href="javascript:vertical({{ vars.row_num }}, {{ offset }})"><p class="inner-btn">+</p></a>
+			</td>
+			{% for itm in row %}
+			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
+			{% if itm %}
+				{% if itm["style"] and itm["message"] %}
+					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+						<div class="row justify-content-between">
+							<div class="col-auto">{{ itm["value"] }}</div>
+							<div class="col-auto">
+								<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+							</div>
+						</div>
+					</td>
+				{% elif itm["style"] %}
+					<td class="bg-{{ itm['style'] }}">{{ itm["value"] }}</td>
+				{% else %}
+					<td>{{ itm["value"] }}</td>
+				{% endif %}
+			{% else %}
+			<td></td>
+			{% endif %}
+			{% endfor %}
+		</tr>
+		{% endfor %}
+	</tbody>
+</table>
+
+{% endblock %}

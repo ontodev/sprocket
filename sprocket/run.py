@@ -433,21 +433,31 @@ def get_table_from_swagger(table):
 
     prev_url, next_url, this_url = get_urls(table, request.args, total, offset=offset, limit=limit)
 
-    return render_template(
-        "table.html",
-        title=table,
-        select=columns,
-        options=options,
-        headers=headers,
-        violations=violations,
-        rows=results,
-        offset=offset,
-        total=total,
-        limit=limit,
-        this_url=this_url,
-        prev_url=prev_url,
-        next_url=next_url,
-    )
+    render_args = {
+        "title": table,
+        "select": columns,
+        "options": options,
+        "violations": violations,
+        "offset": offset,
+        "headers": headers,
+        "total": total,
+        "limit": limit,
+        "this_url": this_url,
+        "prev_url": prev_url,
+        "next_url": next_url,
+    }
+    if limit == 1:
+        row = {}
+        i = 0
+        for h in headers:
+            row[h] = results[0][i]
+            i += 1
+        render_args["row"] = row
+        template = "vertical.html"
+    else:
+        render_args["rows"] = results
+        template = "horizontal.html"
+    return render_template(template, **render_args)
 
 
 def get_where(where, column):
@@ -595,21 +605,31 @@ def render_html(results, table, columns, request_args, hide_meta=True):
 
     prev_url, next_url, this_url = get_urls(table, request_args, total, offset=offset, limit=limit)
 
-    return render_template(
-        "table.html",
-        title=table,
-        select=columns,
-        options=options,
-        headers=headers,
-        violations=violations,
-        rows=results,
-        offset=offset,
-        total=total,
-        limit=limit,
-        this_url=this_url,
-        prev_url=prev_url,
-        next_url=next_url,
-    )
+    render_args = {
+        "title": table,
+        "select": columns,
+        "options": options,
+        "violations": violations,
+        "offset": offset,
+        "total": total,
+        "limit": limit,
+        "this_url": this_url,
+        "prev_url": prev_url,
+        "next_url": next_url,
+    }
+    if limit == 1:
+        row = {}
+        i = 0
+        for h in headers:
+            row[h] = results[0][i]
+            i += 1
+        render_args["row"] = row
+        template = "vertical.html"
+    else:
+        render_args["rows"] = results
+        render_args["headers"] = headers
+        template = "horizontal.html"
+    return render_template(template, **render_args)
 
 
 def get_urls(table, request_args, total_results, offset=0, limit=DEFAULT_LIMIT):

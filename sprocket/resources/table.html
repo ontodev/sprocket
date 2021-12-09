@@ -9,7 +9,7 @@
 					<strong>Query Options</strong>
 				</button>
 			</h2>
-			<div id="collapseOptions" class="accordion-collapse collapse show" data-bs-parent="#accordionOptions">
+			<div id="collapseOptions" class="accordion-collapse collapse" data-bs-parent="#accordionOptions">
 				<div class="accordion-body">
 					<form method="get">
 						<div class="row g-3">
@@ -117,7 +117,7 @@
 										<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
 									</div>
 									<div class="col-auto">
-										<input type="button" onclick="submitForm();" class="btn btn-primary" value="Update">
+										<input type="button" onclick="submitForm({{ headers.keys() | list }});" class="btn btn-primary" value="Update">
 									</div>
 								</div>
 							</div>
@@ -129,63 +129,18 @@
 	</div>
 </div>
 
-<table class="table" id="sqlTable">
-	<thead>
-		<tr>
-			{% for th in headers %}
-			<th>
-				<div class="row justify-content-between">
-					<div class="col-auto">{{ th }}</div>
-					<div class="col-auto">
-						<div class="dropdown">
-							<button class="btn btn-light dropdown-toggle" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"> </button>
-							<ul class="dropdown-menu">
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
-							</ul>
-						</div>
-					</div>
-				</div>
-			</th>
-			{% endfor %}
-		</tr>
-	</thead>
-	<tbody>
-		{% set vars = {'row_num': 0} %}
-		{% for row in rows %}
-		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
-		<tr id="row{{ vars.row_num }}">
-			{% set inner_vars = {'cell_num': 0} %}
-			{% for itm in row %}
-			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
-			{% if itm %}
-				{% if itm["style"] and itm["message"] %}
-					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
-						<div class="row justify-content-between">
-							<div class="col-auto">{{ itm["value"] }}</div>
-							<div class="col-auto">
-								<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
-							</div>
-						</div>
-					</td>
-				{% elif itm["style"] %}
-					<td class="bg-{{ itm['style'] }}">{{ itm["value"] }}</td>
-				{% else %}
-					<td>{{ itm["value"] }}</td>
-				{% endif %}
-			{% else %}
-			<td></td>
-			{% endif %}
-			{% endfor %}
-		</tr>
-		{% endfor %}
-	</tbody>
-</table>
+{% block subcontent %}
+{% endblock %}
 
 <div class="row" style="padding-left:10px; padding-right:10px;">
 	<div class="col">
-		{% if (limit + offset) > (rows|length + offset) %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ rows|length + offset }} of {{ total }}</p>
+		{% if rows %}
+			{% set len = (rows|length + offset) %}
+		{% else %}
+			{% set len = offset + 1 %}
+		{% endif %}
+		{% if (limit + offset) > len %}
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
 		{% else %}
 			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
 		{% endif %}
@@ -303,7 +258,7 @@
 		}
 	}
 
-	function submitForm() {
+	function submitForm(headers) {
 		var args = []
 		// Get the where options
 		for (var h of headers) {
@@ -322,7 +277,7 @@
 				s.push(n[i].value);
 			}
 		}
-		if (s.length > 0) {
+		if (s.length > 0 && s.length < headers.length) {
 			args.push("select=" + s.join(","));
 		}
 
@@ -346,6 +301,26 @@
 		// Redirect to new URL
 		if (args.length > 0) {
 			window.location.href = "?" + args.join("&")
+		}
+	}
+
+	function vertical(rowNum, offset) {
+		var qString = window.location.search;
+		var params = new URLSearchParams(qString);
+		var newParams = [];
+		for (var entry of params.entries()) {
+			if (entry[0] === "limit" || entry[0] === "offset") {
+				continue;
+			} else {
+				newParams.push(`${entry[0]}=${entry[1]}`);
+			}
+		}
+		console.log(newParams);
+		var newOS = rowNum + offset - 1;
+		newParams.push(`offset=${newOS}`);
+		newParams.push("limit=1");
+		if (newParams.length > 0) {
+			window.location.href = "?" + newParams.join("&");
 		}
 	}
 </script>

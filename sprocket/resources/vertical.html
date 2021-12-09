@@ -1,0 +1,27 @@
+{% extends "table.html" %}
+{% block subcontent %}
+
+<div class="row" id="sqlTable" style="padding-bottom:5px;">
+    {% for header, value in row.items() %}
+    <div class="row border-bottom">
+        <div class="col-md-3">
+            <div class="row">
+                <div class="col-auto">
+                    <div class="dropdown">
+                        <button class="btn btn-light dropdown-toggle" type="button" id="{{ header }}Dropdown" data-bs-toggle="dropdown"> </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', false)">Ascending</a></li>
+                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', true)">Descending</a></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-auto"><b>{{ header }}</b></div>
+            </div>
+        </div>
+        <div class="col-md-9">{{ value["value"] }}</div>
+    </div>
+    {% endfor %}
+</div>
+
+
+{% endblock %}
