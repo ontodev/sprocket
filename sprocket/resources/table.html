@@ -198,7 +198,7 @@
 	function expand(level, msg, rowNum, cellNum) {
 		var row = document.getElementById(`row${rowNum}`);
 		var newHtml = `<tr id="expandedRow${rowNum}">`;
-		for (i=0; i < cellNum - 1; i++) {
+		for (i=0; i < cellNum; i++) {
 			newHtml += "<td></td>";
 		}
 		newHtml += `<td>${level.toUpperCase()}: ${msg}</td>`
@@ -213,7 +213,9 @@
 		td.removeAttribute("title");
 		td.removeAttribute("aria-describedby");
 		var tt = document.getElementById(tooltipID);
-		tt.remove();
+		if (tt !== null) {
+			tt.remove();
+		}
 
 		// Update btn
 		var btn = document.getElementById(`expand${rowNum}`);
