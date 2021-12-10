@@ -55,8 +55,8 @@ def get_table_by_name(table):
         return get_table_from_swagger(table)
 
 
-def exec_query(table, select, where_statements=None, order_by=None, violations=None):
-    """Create a query from, minimally, a table name and a select statement."""
+def exec_query(table, columns, select, where_statements=None, order_by=None, violations=None):
+    """Create a query from, minimally, a table name, a list of all columns, and a subset of columns (or *)."""
     query = f"SELECT {', '.join(select)} FROM '{table}'"
     const_dict = {}
     # Add keys for any where statements using user input values
@@ -80,14 +80,14 @@ def exec_query(table, select, where_statements=None, order_by=None, violations=N
         else:
             query += " AND "
         # For each *_meta column, add LIKE filters for the violation levels
-        meta_cols = [x for x in select if x.endswith("_meta")]
+        meta_cols = [x for x in columns if x.endswith("_meta")]
         meta_filters = []
         for m in meta_cols:
             likes = []
             for v in violations:
                 likes.append(f'{m} LIKE \'%"level": "{v}"%\'')
             meta_filters.append("(" + " OR ".join(likes) + ")")
-        query += " AND ".join(meta_filters)
+        query += " OR ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
     query = sql_text(query)
@@ -291,6 +291,7 @@ def get_table_from_database(table, hide_meta=True):
     # Build & execute the query
     results = exec_query(
         table,
+        table_cols,
         select_cols,
         where_statements=where_statements,
         order_by=order_by,
