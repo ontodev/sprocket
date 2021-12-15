@@ -693,8 +693,6 @@ def prepare(db, table=None, limit=None):
     if table:
         DEFAULT_TABLE = table
     DB = db
-    if not DB:
-        raise NameError("'SPROCKET_DB' environment variable must be set")
     if DB.endswith(".db"):
         abspath = os.path.abspath(DB)
         db_url = "sqlite:///" + abspath + "?check_same_thread=False"
