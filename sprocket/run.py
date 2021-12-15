@@ -25,10 +25,6 @@ blueprint = Blueprint(
     __name__,
     template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources")),
 )
-# app = Flask(
-#    __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
-# )
-# app.url_map.strict_slashes = False
 
 CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
