@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from collections import defaultdict
 from copy import deepcopy
 from configparser import ConfigParser
-from flask import abort, Flask, render_template, request, Response
+from flask import abort, Blueprint, Flask, render_template, request, Response
 from io import StringIO
 from sqlalchemy import create_engine
 from sqlalchemy.engine.base import Connection
@@ -20,10 +20,15 @@ from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
 
-app = Flask(
-    __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
+sprocket = Blueprint(
+    "sprocket",
+    __name__,
+    template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources")),
 )
-app.url_map.strict_slashes = False
+# app = Flask(
+#    __name__, template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources"))
+# )
+# app.url_map.strict_slashes = False
 
 CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
@@ -45,7 +50,7 @@ FILTER_OPTS = {
 SWAGGER_CACHE = ".swagger"
 
 
-@app.route("/<table>", methods=["GET"])
+@sprocket.route("/<table>", methods=["GET"])
 def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("base.html")
@@ -56,7 +61,8 @@ def get_table_by_name(table):
 
 
 def exec_query(table, columns, select, where_statements=None, order_by=None, violations=None):
-    """Create a query from, minimally, a table name, a list of all columns, and a subset of columns (or *)."""
+    """Create a query from, minimally, a table name, a list of all columns,
+    and a subset of columns (or *)."""
     query = f"SELECT {', '.join(select)} FROM '{table}'"
     const_dict = {}
     # Add keys for any where statements using user input values
@@ -167,7 +173,8 @@ def get_sql_tables():
 
 
 def get_swagger_details(table, data, get_all_columns=False):
-    """Get a list of columns for a table from Swagger, checking first if we've cached the columns."""
+    """Get a list of columns for a table from Swagger,
+    checking first if we've cached the columns."""
     # Check for columns in the cache file
     table_columns = defaultdict(list)
     columns_file = os.path.join(SWAGGER_CACHE, "columns.tsv")
@@ -671,18 +678,11 @@ def get_urls(table, request_args, total_results, offset=0, limit=DEFAULT_LIMIT):
     return prev_url, next_url, this_url
 
 
-def main():
+def prepare(db, table=None, limit=None):
     global CONN, DB, DEFAULT_LIMIT
-    parser = ArgumentParser()
-    parser.add_argument("db")
-    parser.add_argument("-t", "--table", help="Default table to show")
-    parser.add_argument("-l", "--limit", help="Default limit for results (default: 100)", type=int)
-    parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
-    parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
-    args = parser.parse_args()
-    if args.limit:
-        DEFAULT_LIMIT = args.limit
-    DB = args.db
+    if limit:
+        DEFAULT_LIMIT = limit
+    DB = db
     if not DB:
         raise NameError("'SPROCKET_DB' environment variable must be set")
     if DB.endswith(".db"):
@@ -727,15 +727,15 @@ def main():
     # )
 
     # Maybe set the base route to provided default table
-    if args.table:
+    if table:
 
-        @app.route("/", methods=["GET"])
+        @sprocket.route("/", methods=["GET"])
         def get_default_table():
-            return get_table_from_database(args.table)
+            return get_table_from_database(table)
 
     else:
 
-        @app.route("/", methods=["GET"])
+        @sprocket.route("/", methods=["GET"])
         def show_tables():
             if CONN:
                 tables = get_sql_tables()
@@ -743,6 +743,24 @@ def main():
                 tables = get_swagger_tables()
             return render_template("index.html", title="sprocket", tables=tables)
 
+
+def main():
+    global CONN, DB, DEFAULT_LIMIT
+    parser = ArgumentParser()
+    parser.add_argument("db")
+    parser.add_argument("-t", "--table", help="Default table to show")
+    parser.add_argument("-l", "--limit", help="Default limit for results (default: 100)", type=int)
+    parser.add_argument("-c", "--cgi", help="Run as CGI script", action="store_true")
+    parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
+    args = parser.parse_args()
+
+    # Set up the database connection
+    prepare(args.db, table=args.table, limit=args.limit)
+
+    # Register blueprint and run app
+    app = Flask(__name__)
+    app.register_blueprint(sprocket)
+    app.url_map.strict_slashes = False
     try:
         if args.cgi:
             CGIHandler().run(app)
