@@ -20,7 +20,7 @@ from wsgiref.handlers import CGIHandler
 from .grammar import PARSER, SprocketTransformer
 
 
-sprocket = Blueprint(
+blueprint = Blueprint(
     "sprocket",
     __name__,
     template_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), "resources")),
@@ -33,6 +33,7 @@ sprocket = Blueprint(
 CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
 DEFAULT_LIMIT = 100
+DEFAULT_TABLE = None
 FILTER_OPTS = {
     "eq": {"label": "equals"},
     "gt": {"label": "greater than"},
@@ -50,7 +51,18 @@ FILTER_OPTS = {
 SWAGGER_CACHE = ".swagger"
 
 
-@sprocket.route("/<table>", methods=["GET"])
+@blueprint.route("/", methods=["GET"])
+def show_tables():
+    if DEFAULT_TABLE:
+        return get_table_from_database(DEFAULT_TABLE)
+    if CONN:
+        tables = get_sql_tables()
+    else:
+        tables = get_swagger_tables()
+    return render_template("index.html", title="sprocket", tables=tables)
+
+
+@blueprint.route("/<table>", methods=["GET"])
 def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("base.html")
@@ -679,9 +691,11 @@ def get_urls(table, request_args, total_results, offset=0, limit=DEFAULT_LIMIT):
 
 
 def prepare(db, table=None, limit=None):
-    global CONN, DB, DEFAULT_LIMIT
+    global CONN, DB, DEFAULT_LIMIT, DEFAULT_TABLE
     if limit:
         DEFAULT_LIMIT = limit
+    if table:
+        DEFAULT_TABLE = table
     DB = db
     if not DB:
         raise NameError("'SPROCKET_DB' environment variable must be set")
@@ -726,26 +740,8 @@ def prepare(db, table=None, limit=None):
     # "Either a database file or a config file must be specified with a .db or .ini extension"
     # )
 
-    # Maybe set the base route to provided default table
-    if table:
-
-        @sprocket.route("/", methods=["GET"])
-        def get_default_table():
-            return get_table_from_database(table)
-
-    else:
-
-        @sprocket.route("/", methods=["GET"])
-        def show_tables():
-            if CONN:
-                tables = get_sql_tables()
-            else:
-                tables = get_swagger_tables()
-            return render_template("index.html", title="sprocket", tables=tables)
-
 
 def main():
-    global CONN, DB, DEFAULT_LIMIT
     parser = ArgumentParser()
     parser.add_argument("db")
     parser.add_argument("-t", "--table", help="Default table to show")
@@ -754,12 +750,12 @@ def main():
     parser.add_argument("-s", "--save-cache", help="Save Swagger cache", action="store_true")
     args = parser.parse_args()
 
-    # Set up the database connection
+    # Set up some globals and the database connection
     prepare(args.db, table=args.table, limit=args.limit)
 
     # Register blueprint and run app
     app = Flask(__name__)
-    app.register_blueprint(sprocket)
+    app.register_blueprint(blueprint)
     app.url_map.strict_slashes = False
     try:
         if args.cgi:
