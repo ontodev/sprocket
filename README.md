@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
 To run a test version of `sprocket`, use the SQL file at `tests/resources/test.sql` to generate a new database:
 ```bash
-sqlite3 test.db < tests/templates/test.sql
+sqlite3 test.db < tests/resources/test.sql
 ```
 
 Then start the `sprocket` server with the default table set to `test1`:
