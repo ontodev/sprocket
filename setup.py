@@ -25,5 +25,5 @@ setup(
     install_requires=install_requires,
     packages=find_packages(exclude="tests"),
     entry_points={"console_scripts": ["sprocket=sprocket.run:main"]},
-    package_data={"sprocket": ["resources/*.html"]}
+    package_data={"sprocket": ["templates/*.html"]}
 )

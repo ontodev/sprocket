@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 
+{% if show_options %}
 <div class="row" style="padding:10px;">
 	<div class="accordion" id="accordionOptions">
 		<div class="accordion-item">
@@ -112,12 +113,15 @@
 										</select>
 									</div>
 								</div>
+								{% for k, v in hidden.items() %}
+								<input id="{{ k }}" value="{{ v }}" hidden/>
+								{% endfor %}
 								<div class="row" style="padding-top:20px;">
 									<div class="col-auto">
 										<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
 									</div>
 									<div class="col-auto">
-										<input type="button" onclick="submitForm({{ headers.keys() | list }});" class="btn btn-primary" value="Update">
+										<input type="button" onclick="submitForm({{ headers.keys() | list }}, {{ hidden.keys() | list }});" class="btn btn-primary" value="Update">
 									</div>
 								</div>
 							</div>
@@ -128,6 +132,7 @@
 		</div>
 	</div>
 </div>
+{% endif %}
 
 {% block subcontent %}
 {% endblock %}
@@ -165,6 +170,7 @@
 	</div>
 </div>
 
+{% if standalone %}
 <script>
 	// Enable tooltips
 	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
@@ -260,7 +266,7 @@
 		}
 	}
 
-	function submitForm(headers) {
+	function submitForm(headers, hidden) {
 		var args = []
 		// Get the where options
 		for (var h of headers) {
@@ -269,6 +275,12 @@
 			if (operator && constraint) {
 				args.push(h + "=" + operator + "." + constraint);
 			}
+		}
+
+		// Get any hidden args
+		for (var h of hidden) {
+			var val = document.getElementById(h).value;
+			args.push(h + "=" + val);
 		}
 
 		// Get the select options
@@ -326,5 +338,6 @@
 		}
 	}
 </script>
+{% endif %}
 
 {% endblock %}
