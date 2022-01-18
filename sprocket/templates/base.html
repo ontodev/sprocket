@@ -1,3 +1,4 @@
+{% if standalone %}
 <html>
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -37,8 +38,11 @@
 	{% endif %}
 </head>
 <body>
+{% endif %}
 	{% block content %}
 	{{ default|safe }}
 	{% endblock %}
+{% if standalone %}
 </body>
 </html>
+{% endif %}

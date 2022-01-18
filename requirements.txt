@@ -1,4 +1,5 @@
-Flask
+Flask>=2.0
 lark-parser
+jinja2
 requests
 SQLAlchemy

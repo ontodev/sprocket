@@ -31,10 +31,10 @@ You can also choose to run your own Flask app that uses `sprocket` as a [Bluepri
 
 ```python
 from flask import Flask
-from sprocket import blueprint, prepare
+from sprocket import BLUEPRINT, prepare
 
 app = Flask(__name__)
-app.register_blueprint(blueprint, url_prefix="/sprocket")
+app.register_blueprint(BLUEPRINT, url_prefix="/sprocket")
 prepare(PATH_TO_DATABASE)
 
 if __name__ == '__main__':
