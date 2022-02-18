@@ -1,27 +1,26 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
-<div class="row" id="sqlTable" style="padding-bottom:5px;">
+<div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
     {% for header, value in row.items() %}
-    <div class="row border-bottom">
+    <div id="{{ header }}" class="row border-bottom data-row" style="margin-left: 10px; margin-right:10px;">
+        {% if header == "rowid" %}
+        <input id="row-id" value='{{ value["value"] }}' hidden/>
+        {% else %}
         <div class="col-md-3">
             <div class="row">
                 <div class="col-auto">
-                    <div class="dropdown">
-                        <button class="btn btn-light dropdown-toggle" type="button" id="{{ header }}Dropdown" data-bs-toggle="dropdown"> </button>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', false)">Ascending</a></li>
-                            <li><a class="dropdown-item" href="javascript:sort('{{ header }}', true)">Descending</a></li>
-                        </ul>
-                    </div>
+                    <b>{{ header }}</b>
+                    {% if descriptions and header in descriptions %}
+                    <button class="btn" data-bs-toggle="tooltip" data-bs-placement="right" title="{{ descriptions[header] }}"><i class="bi-question-circle"></i></button>
+                    {% endif %}
                 </div>
-                <div class="col-auto"><b>{{ header }}</b></div>
             </div>
         </div>
-        <div class="col-md-9">{{ value["value"]|safe }}</div>
+        <div class="col-md-9" id="{{ header }}-value">{{ value["value"]|safe }}</div>
+        {% endif %}
     </div>
     {% endfor %}
 </div>
-
 
 {% endblock %}

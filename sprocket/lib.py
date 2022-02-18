@@ -1,36 +1,13 @@
 import csv
-import jinja2
-import json
 import os
 import requests
 
 from collections import defaultdict
-from copy import deepcopy
-from io import StringIO
-from jinja2 import PackageLoader
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
 from typing import Tuple, List, Optional
 from .grammar import PARSER, SprocketTransformer
-
-FILTER_OPTS = {
-    "eq": {"label": "equals"},
-    "gt": {"label": "greater than"},
-    "gte": {"label": "greater than or equals"},
-    "lt": {"label": "less than"},
-    "lte": {"label": "less than or equals"},
-    "neq": {"label": "not equals"},
-    "like": {"label": "like"},
-    "ilike": {"label": "like (insensitive)"},
-    "is": {"label": "is"},
-    "not.is": {"label": "is not"},
-    "in": {"label": "in"},
-    "not.in": {"label": "not in"},
-}
-
-loader = PackageLoader("sprocketv2")
-template_env = jinja2.Environment(loader=loader)
 
 
 def exec_query(
@@ -52,7 +29,13 @@ def exec_query(
     :param violations: violation level(s) to filter meta columns by (requires columns as well)
     :return: query results
     """
-    query = f"SELECT {', '.join(select)} FROM '{table}'"
+    query = "SELECT rowid"
+    for s in select:
+        if s != "*":
+            query += f', "{s}"'
+        else:
+            query += ", *"
+    query += f' FROM "{table}"'
     const_dict = {}
     # Add keys for any where statements using user input values
     if where_statements:
@@ -189,9 +172,8 @@ def get_swagger_tables(url):
     return [path[1:] for path, details in data["paths"].items() if path != "/" and "get" in details]
 
 
-def get_urls(table, request_args, total_results, offset=0, limit=100) -> Tuple[str, str, str]:
+def get_urls(base_url, request_args, total_results, offset=0, limit=100) -> Tuple[str, str, str]:
     # Get URLs for "previous" and "next" links
-    url = "./" + table
     prev_url = None
     next_url = None
     if offset > 0:
@@ -202,16 +184,16 @@ def get_urls(table, request_args, total_results, offset=0, limit=100) -> Tuple[s
             prev_offset = 0
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items()]
-        prev_url = url + "?" + "&".join(prev_query)
+        prev_url = base_url + "?" + "&".join(prev_query)
     if limit + offset < total_results:
         # Only include "next" link if we aren't at the end
         next_args = request_args.copy()
         next_args["offset"] = limit + offset
         next_query = [f"{k}={v}" for k, v in next_args.items()]
-        next_url = url + "?" + "&".join(next_query)
+        next_url = base_url + "?" + "&".join(next_query)
 
     # Current URL is used for download links
-    this_url = url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
+    this_url = base_url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
 
     return prev_url, next_url, this_url
 
@@ -307,180 +289,3 @@ def parse_where(where, column) -> Tuple[str, str]:
     else:
         query_op = operator.upper()
     return statement + f"{column} {query_op}", constraint
-
-
-def render_html_table(
-    data,
-    table,
-    columns,
-    request_args,
-    total=None,
-    hidden=None,
-    hide_meta=True,
-    show_options=True,
-    include_expand=True,
-    default_limit=100,
-    standalone=True,
-):
-    """Render the results as an HTML table."""
-    header_names = list(data[0].keys())
-
-    # Clean up null values and add styles
-    results = []
-    for res in data:
-        values = {}
-        for k, v in res.items():
-            style = None
-            if not v:
-                v = ""
-                style = "null"
-            values[k] = {"value": v, "style": style, "message": None}
-        results.append(values)
-
-    if hide_meta:
-        # exclude *_meta columns from display and use the values to render cell styles
-        meta_names = [x for x in header_names if x.endswith("_meta")]
-        header_names = [x for x in header_names if x not in meta_names]
-        # also update columns for selections
-        columns = [x for x in columns if not x.endswith("_meta")]
-        # iter through results and update
-        res_updated = []
-        for res in results:
-            for m in meta_names:
-                # Get the metadata as JSON
-                meta = res[m]["value"]
-                del res[m]
-                if not meta:
-                    continue
-                metadata = json.loads(meta[5:-1])
-
-                if metadata.get("valid") and not metadata.get("nulltype"):
-                    # Cell is not a null & is valid, nothing to style or change
-                    continue
-
-                # This is the name of the column we are editing
-                value_col = m[:-5]
-                # Set the value to what is given in the JSON (as "value")
-                res[value_col]["value"] = metadata["value"]
-                if "nulltype" in metadata:
-                    # Set null style and go to next
-                    res[value_col]["style"] = "null"
-                    continue
-
-                # Use a number for violation level to make sure the "worst" violation is displayed
-                violation_level = -1
-                messages = []
-                if "messages" in metadata:
-                    for msg in metadata["messages"]:
-                        lvl = msg["level"]
-                        messages.append(lvl.upper() + ": " + msg["message"])
-                        if lvl == "error":
-                            violation_level = 3
-                        elif lvl == "warn" and violation_level < 3:
-                            violation_level = 2
-                        elif lvl == "info" and violation_level < 2:
-                            violation_level = 1
-                        elif lvl == "debug" and violation_level < 1:
-                            violation_level = 0
-
-                # Set cell style based on violation level
-                if violation_level == 0:
-                    res[value_col]["style"] = "debug"
-                elif violation_level == 1:
-                    res[value_col]["style"] = "info"
-                elif violation_level == 2:
-                    res[value_col]["style"] = "warn"
-                elif violation_level == 3:
-                    res[value_col]["style"] = "error"
-
-                # Join multiple messages with line breaks
-                res[value_col]["message"] = "\n".join(messages)
-            res_updated.append(list(res.values()))
-        results = res_updated
-
-    offset = int(request_args.get("offset", "0"))
-    limit = int(request_args.get("limit", default_limit))
-
-    if not total:
-        total = len(results)
-        results = list(results)[offset : limit + offset]
-
-    # Set the options for the "results per page" drop down
-    options = []
-    limit_vals = {1, 10, 50, 100, 500, total}
-    if limit not in limit_vals:
-        limit_vals.add(limit)
-    limit_vals = sorted(limit_vals)
-    for lv in limit_vals:
-        # Make sure the 'selected' value is our current limit
-        if lv == limit:
-            options.append(f'<option value="{lv}" selected>{lv}</option>')
-        else:
-            options.append(f'<option value="{lv}">{lv}</option>')
-
-    # Set the options for filtering
-    headers = {}
-    for h in header_names:
-        fltr = request_args.get(h)
-        if not fltr:
-            headers[h] = {"options": FILTER_OPTS, "has_selected": False}
-            continue
-        cur_options = deepcopy(FILTER_OPTS)
-        opt = fltr.rsplit(".", 1)[0]
-        val = fltr.rsplit(".", 1)[1]
-        cur_options[opt]["selected"] = True
-        headers[h] = {"options": cur_options, "const": val}
-
-    # Set the options for violation filtering
-    violations = request_args.get("violations", "").split(",")
-
-    prev_url, next_url, this_url = get_urls(table, request_args, total, offset=offset, limit=limit)
-
-    hidden_args = {}
-    if hidden:
-        for h in hidden:
-            hidden_args[h] = request_args.get(h)
-
-    render_args = {
-        "title": table,
-        "select": columns,
-        "options": options,
-        "violations": violations,
-        "offset": offset,
-        "headers": headers,
-        "hidden": hidden_args,
-        "total": total,
-        "limit": limit,
-        "this_url": this_url,
-        "prev_url": prev_url,
-        "next_url": next_url,
-        "include_expand": include_expand,
-        "show_options": show_options,
-        "standalone": standalone,
-    }
-    if limit == 1 or total == 1:
-        row = {}
-        i = 0
-        for h in headers:
-            row[h] = results[0][i]
-            i += 1
-        render_args["row"] = row
-        template = "vertical.html"
-    else:
-        render_args["rows"] = results
-        render_args["headers"] = headers
-        template = "horizontal.html"
-    t = template_env.get_template(template)
-    return t.render(**render_args)
-
-
-def render_tsv_table(data, fmt="tsv"):
-    headers = data[0].keys()
-    output = StringIO()
-    sep = "\t"
-    if fmt == "csv":
-        sep = ","
-    writer = csv.DictWriter(output, delimiter=sep, fieldnames=list(headers), lineterminator="\n")
-    writer.writeheader()
-    writer.writerows(list(data))
-    return output.getvalue()

@@ -1,27 +1,15 @@
-import csv
 import os
-import requests
 import shutil
 
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from flask import abort, Flask, Blueprint, render_template, request, Response
-from io import StringIO
+from flask import Flask, Blueprint, render_template
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from typing import Optional
 from wsgiref.handlers import CGIHandler
-from .lib import (
-    exec_query,
-    get_sql_columns,
-    get_sql_tables,
-    get_swagger_details,
-    get_swagger_tables,
-    parse_order_by,
-    parse_where,
-    render_html_table,
-    render_tsv_table,
-)
+from .render import render_database_table, render_swagger_table
+from .lib import get_sql_tables, get_swagger_tables
 
 BLUEPRINT = Blueprint(
     "sprocket",
@@ -41,7 +29,7 @@ SWAGGER_CACHE = ".swagger"
 @BLUEPRINT.route("/", methods=["GET"])
 def show_tables():
     if DEFAULT_TABLE:
-        return get_table_from_database(DEFAULT_TABLE)
+        return render_database_table(CONN, DEFAULT_TABLE)
     if CONN:
         tables = get_sql_tables(CONN)
     else:
@@ -54,176 +42,9 @@ def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("test.html")
     if CONN:
-        return get_table_from_database(table)
+        return render_database_table(CONN, table, default_limit=DEFAULT_LIMIT)
     else:
-        return get_table_from_swagger(table)
-
-
-def get_table_from_database(table, hide_meta=True):
-    """Get the SQL table for the Flask app."""
-    if table not in get_sql_tables(CONN):
-        return abort(422, f"'{table}' is not a valid table in the database")
-    table_cols = get_sql_columns(CONN, table)
-
-    limit = request.args.get("limit", DEFAULT_LIMIT)
-    try:
-        limit = int(limit)
-    except ValueError:
-        return abort(422, "'limit' must be an integer")
-
-    offset = request.args.get("offset", "0")
-    try:
-        offset = int(offset)
-    except ValueError:
-        return abort(422, "'offset' must be an integer")
-
-    limit = limit + offset
-
-    fmt = request.args.get("format", "html")
-    if fmt not in ["tsv", "csv", "html"]:
-        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
-
-    select = request.args.get("select")
-    if select:
-        select_cols = select.split(",")
-        invalid_cols = list(set(select_cols) - set(table_cols))
-        if invalid_cols:
-            return abort(
-                422,
-                f"The following column(s) do not exist in '{table}' table: "
-                + ", ".join(invalid_cols),
-            )
-        if hide_meta:
-            # Add any necessary meta cols, since they don't appear in select filters
-            select_cols.extend([f"{x}_meta" for x in select_cols if f"{x}_meta" in table_cols])
-    else:
-        select_cols = ["*"]
-
-    where_statements = []
-    for tc in table_cols:
-        where = request.args.get(tc)
-        if not where:
-            continue
-        try:
-            stmt = parse_where(where, tc)
-        except ValueError as e:
-            return abort(422, str(e))
-        where_statements.append(stmt)
-
-    order_by = []
-    order = request.args.get("order")
-    if order:
-        try:
-            order_by = []
-            for ob in parse_order_by(order):
-                s = [ob["key"]]
-                if ob["order"]:
-                    s.append(ob["order"].upper())
-                if ob["nulls"]:
-                    s.append("NULLS " + ob["nulls"].upper())
-                order_by.append(" ".join(s))
-        except ValueError as e:
-            return abort(422, str(e))
-
-    violations = request.args.get("violations")
-    if violations:
-        violations = violations.split(",")
-        for v in violations:
-            if v not in ["debug", "info", "warn", "error"]:
-                return abort(
-                    422,
-                    f"'violations' contains invalid level '{v}' - must be one of: debug, info, warn, error",
-                )
-
-    # Build & execute the query
-    results = exec_query(
-        CONN,
-        table,
-        columns=table_cols,
-        select=select_cols,
-        where_statements=where_statements,
-        order_by=order_by,
-        violations=violations,
-    )
-
-    # Return results based on format
-    if fmt == "html":
-        return render_html_table(
-            results, table, table_cols, request.args, default_limit=DEFAULT_LIMIT
-        )
-    headers = results[0].keys()
-    output = StringIO()
-    sep = "\t"
-    mt = "text/tab-separated-values"
-    if fmt == "csv":
-        sep = ","
-        mt = "text/comma-separated-values"
-    writer = csv.writer(output, delimiter=sep, lineterminator="\n")
-    writer.writerow(list(headers))
-    writer.writerows(list(results)[offset : limit + offset])
-    return Response(output.getvalue(), mimetype=mt)
-
-
-def get_table_from_swagger(table, limit=100):
-    if not os.path.exists(SWAGGER_CACHE):
-        os.mkdir(SWAGGER_CACHE)
-
-    # Create a URL to get JSON from
-    url = DB + "/" + table
-    swagger_request_args = []
-    get_all_columns = False
-
-    # Parse args and create request
-    fmt = None
-    has_limit = False
-    for arg, value in request.args.items():
-        if arg == "select":
-            get_all_columns = True
-        if arg == "limit":
-            has_limit = True
-            limit = int(value)
-        if arg == "violations":
-            continue
-        if arg == "format":
-            fmt = value
-            continue
-        swagger_request_args.append(f"{arg}={value}")
-    if not has_limit:
-        # We always want to have the limit
-        swagger_request_args.append(f"limit={limit}")
-
-    # Send request and get data + total rows
-    if swagger_request_args:
-        url += "?" + "&".join(swagger_request_args)
-    r = requests.get(url, verify=False)
-    data = r.json()
-
-    # Error from API
-    if type(data) == dict:
-        if data.get("message") and data.get("details"):
-            msg = data["message"]
-            details = data["details"]
-        else:
-            msg = "Unable to complete query"
-            details = "Please revise query and try again."
-        return render_template(
-            "test.html",
-            title=table,
-            default=f"<div class='container'><h2>{msg}</h2><p>{details}</p></div>",
-        )
-
-    if fmt:
-        # Save to TSV or CSV, just returning that response
-        mt = "tab-separated-values"
-        if fmt == "csv":
-            mt = "comma-separated-values"
-        output = render_tsv_table(data, fmt=fmt)
-        return Response(output, mimetype=mt)
-
-    columns, total = get_swagger_details(
-        DB, table, data, get_all_columns=get_all_columns, swagger_cache=SWAGGER_CACHE
-    )
-    return render_html_table(data, table, columns, request.args, total=total, default_limit=DEFAULT_LIMIT)
+        return render_swagger_table(DB, table, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE)
 
 
 def prepare(db, table=None, limit=None):
