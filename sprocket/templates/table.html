@@ -17,6 +17,7 @@
 							<div class="col-md-7" style="padding-right:30px;">
 								<p class="lead">Filter results</p>
 								{% for h, details in headers.items() %}
+								{% if h != "rowid" %}
 								<div class="row">
 									<div class="col-sm-4 col-form-label">
 										<label>{{ h }}</label>
@@ -43,6 +44,7 @@
 										{% endif %}
 									</div>
 								</div>
+								{% endif %}
 								{% endfor %}
 							</div>
 							<div class="col-md-3">
@@ -166,7 +168,10 @@
 </div>
 <div class="row" style="padding-left:10px; padding-right:10px;">
 	<div class="col">
-		<p>Download results: <a href="{{ this_url }}&format=tsv">tsv</a> | <a href="{{ this_url }}&format=csv">csv</a></p>
+		{% if not this_url.endswith('?') %}
+			{% set this_url = this_url + '&' %}
+		{% endif %}
+		<p>Download results: <a href="{{ this_url }}format=tsv">tsv</a> | <a href="{{ this_url }}format=csv">csv</a></p>
 	</div>
 </div>
 
@@ -268,6 +273,7 @@
 
 	function submitForm(headers, hidden) {
 		var args = []
+		headers = headers.filter(e => e !== "rowid");
 		// Get the where options
 		for (var h of headers) {
 			var operator = document.getElementById(h + 'Operator').value;

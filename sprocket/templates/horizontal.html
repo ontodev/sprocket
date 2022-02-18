@@ -1,11 +1,12 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
-<table class="table" id="sqlTable">
+<table class="table" id="sqlTableHorizontal">
 	<thead>
 		<tr>
 			{% if include_expand %} <th/> {% endif %}
 			{% for th in headers %}
+			{% if th != "rowid" %}
 			<th>
 				<div class="row justify-content-between">
 					<div class="col-auto">{{ th }}</div>
@@ -20,6 +21,7 @@
 					</div>
 				</div>
 			</th>
+			{% endif %}
 			{% endfor %}
 		</tr>
 	</thead>
@@ -35,6 +37,7 @@
 			</td>
 			{% endif %}
 			{% for itm in row %}
+			{% if itm["header"] != "rowid" %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 			{% if itm %}
 				{% if itm["style"] and itm["message"] %}
@@ -53,6 +56,7 @@
 				{% endif %}
 			{% else %}
 			<td></td>
+			{% endif %}
 			{% endif %}
 			{% endfor %}
 		</tr>
