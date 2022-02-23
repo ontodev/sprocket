@@ -2,24 +2,30 @@
 {% block subcontent %}
 
 <div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
-    {% for header, value in row.items() %}
-    <div id="{{ header }}" class="row border-bottom data-row" style="margin-left: 10px; margin-right:10px;">
-        {% if header == "rowid" %}
-        <input id="row-id" value='{{ value["value"] }}' hidden/>
-        {% else %}
+    {% for itm in row %}
+    {% if itm["header"] == "rowid" %}
+    <input id="row-id" value='{{ itm["value"] }}' hidden/>
+    {% else %}
+    <div class="row border-bottom">
         <div class="col-md-3">
             <div class="row">
                 <div class="col-auto">
-                    <b>{{ header }}</b>
-                    {% if descriptions and header in descriptions %}
-                    <button class="btn" data-bs-toggle="tooltip" data-bs-placement="right" title="{{ descriptions[header] }}"><i class="bi-question-circle"></i></button>
+                    <b>{{ itm["header"] }}</b>
+                    {% if descriptions and itm["header"] in descriptions %}
+                    <button class="btn" data-bs-toggle="tooltip" data-bs-placement="right" title="{{ descriptions[itm['header']] }}"><i class="bi-question-circle"></i></button>
                     {% endif %}
                 </div>
             </div>
         </div>
-        <div class="col-md-9" id="{{ header }}-value">{{ value["value"]|safe }}</div>
+        {% if itm["style"] and itm["message"] %}
+        <div class="col-md-9 bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">{{ itm["value"]|safe }}</div>
+        {% elif itm["style"] %}
+        <div class="col-md-9 bg-{{ itm['style'] }}">{{ itm["value"]|safe }}</div>
+        {% else %}
+        <div class="col-md-9">{{ itm["value"]|safe }}</div>
         {% endif %}
     </div>
+    {% endif %}
     {% endfor %}
 </div>
 

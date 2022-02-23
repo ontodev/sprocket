@@ -341,35 +341,29 @@ def render_html_table(
 
     logging.error(display_messages)
     render_args = {
-        "title": table,
-        "select": columns,
-        "options": options,
-        "violations": violations,
-        "offset": offset,
         "headers": headers,
         "hidden": hidden_args,
-        "total": total,
-        "limit": limit,
-        "this_url": this_url,
-        "prev_url": prev_url,
-        "next_url": next_url,
         "include_expand": include_expand,
+        "limit": limit,
+        "messages": display_messages,
+        "next_url": next_url,
+        "offset": offset,
+        "options": options,
+        "prev_url": prev_url,
+        "select": columns,
         "show_options": show_options,
         "standalone": standalone,
-        "messages": display_messages,
+        "this_url": this_url,
+        "title": table,
+        "total": total,
+        "violations": violations,
     }
     if limit == 1 or total == 1:
-        row = {}
-        i = 0
-        for h in headers:
-            row[h] = results[0][i]
-            i += 1
-        render_args["row"] = row
         render_args["descriptions"] = descriptions
+        render_args["row"] = results[0]
         template = "vertical.html"
     else:
         render_args["rows"] = results
-        render_args["headers"] = headers
         template = "horizontal.html"
     t = template_env.get_template(template)
     return t.render(**render_args)
