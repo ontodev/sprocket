@@ -45,6 +45,7 @@ def render_database_table(
     hide_meta=True,
     show_help=False,
     standalone=True,
+    use_view=True,
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
     containing TSV/CSV. Utilizes Flask request.args.
@@ -60,7 +61,9 @@ def render_database_table(
                       the cell value and (maybe) error message of the matching column.
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
-    :param standalone: if False, do not include HTML headers & script."""
+    :param standalone: if True, include HTML headers & script in HTML output.
+    :param use_view: if True, attempt to retrieve results from a '*_view' table which combines the
+                      table and its conflict table."""
     tables = get_sql_tables(conn)
     if table not in tables:
         return abort(422, f"'{table}' is not a valid table in the database")
@@ -148,15 +151,27 @@ def render_database_table(
                 )
 
     # Build & execute the query
-    results = exec_query(
-        conn,
-        table,
-        columns=table_cols,
-        select=select_cols,
-        where_statements=where_statements,
-        order_by=order_by,
-        violations=violations,
-    )
+    results = None
+    if use_view:
+        results = exec_query(
+            conn,
+            table + "_view",
+            columns=table_cols,
+            select=select_cols,
+            where_statements=where_statements,
+            order_by=order_by,
+            violations=violations,
+        )
+    if not results:
+        results = exec_query(
+            conn,
+            table,
+            columns=table_cols,
+            select=select_cols,
+            where_statements=where_statements,
+            order_by=order_by,
+            violations=violations,
+        )
 
     # Return results based on format
     if fmt == "html":
