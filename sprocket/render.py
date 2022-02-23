@@ -44,6 +44,7 @@ def render_database_table(
     display_messages=None,
     hide_meta=True,
     show_help=False,
+    standalone=True,
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
     containing TSV/CSV. Utilizes Flask request.args.
@@ -58,7 +59,8 @@ def render_database_table(
     :param hide_meta: if True, hide any columns ending with '_meta'. These will be used to format
                       the cell value and (maybe) error message of the matching column.
     :param show_help: if True, show descriptions for columns in single-row view.
-                      This requires the 'column' table in the database."""
+                      This requires the 'column' table in the database.
+    :param standalone: if True (default), include HTML headers and script."""
     tables = get_sql_tables(conn)
     if table not in tables:
         return abort(422, f"'{table}' is not a valid table in the database")
@@ -166,6 +168,7 @@ def render_database_table(
             default_limit=default_limit,
             descriptions=descriptions,
             display_messages=display_messages,
+            standalone=standalone,
         )
     headers = results[0].keys()
     output = StringIO()
