@@ -328,7 +328,9 @@ def render_html_table(
 
     if not base_url:
         base_url = "./" + table
-    prev_url, next_url, this_url = get_urls(base_url, request_args, total, offset=offset, limit=limit)
+    prev_url, next_url, this_url = get_urls(
+        base_url, request_args, total, offset=offset, limit=limit
+    )
 
     hidden_args = {}
     if hidden:
@@ -336,6 +338,7 @@ def render_html_table(
             hidden_args[h] = request_args.get(h)
 
     import logging
+
     logging.error(display_messages)
     render_args = {
         "title": table,
@@ -372,13 +375,16 @@ def render_html_table(
     return t.render(**render_args)
 
 
-def render_swagger_table(swagger_url, table, default_limit=100, swagger_cache=".swagger"):
+def render_swagger_table(
+    swagger_url, table, default_limit=100, standalone=False, swagger_cache=".swagger"
+):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
     or a Response object containing TSV/CSV. Utilizes Flask request.args.
 
     :param swagger_url: URL to remote database (Swagger)
     :param table: table name
     :param default_limit: if limit parameter is not provided, default number of results to show
+    :param standalone: if True, include HTML headers & script in HTML output.
     :param swagger_cache: directory to store Swagger details
     :return: rendered HTML or Response containing table to download
     """
@@ -440,7 +446,13 @@ def render_swagger_table(swagger_url, table, default_limit=100, swagger_cache=".
         swagger_url, table, data, get_all_columns=get_all_columns, swagger_cache=swagger_cache
     )
     return render_html_table(
-        data, table, columns, request.args, total=total, default_limit=default_limit
+        data,
+        table,
+        columns,
+        request.args,
+        total=total,
+        default_limit=default_limit,
+        standalone=standalone,
     )
 
 
