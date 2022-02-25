@@ -265,7 +265,7 @@ def render_html_table(
                 if "messages" in metadata:
                     for msg in metadata["messages"]:
                         lvl = msg["level"]
-                        messages.append(lvl.upper() + ": " + msg["message"])
+                        messages.append(msg["message"])
                         if lvl == "error":
                             violation_level = 3
                         elif lvl == "warn" and violation_level < 3:
@@ -286,7 +286,9 @@ def render_html_table(
                     res[value_col]["style"] = "error"
 
                 # Join multiple messages with line breaks
-                res[value_col]["message"] = "\n".join(messages)
+                if len(messages) > 1:
+                    messages = [f"({i}) {msg}" for i, msg in enumerate(messages, 1)]
+                res[value_col]["message"] = "<br>".join(messages)
             res_updated.append(list(res.values()))
         results = res_updated
 

@@ -3,9 +3,6 @@
 
 <div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
     {% for itm in row %}
-    {% if itm["header"] == "rowid" %}
-    <input id="row-id" value='{{ itm["value"] }}' hidden/>
-    {% else %}
     <div class="row border-bottom">
         <div class="col-md-3">
             <div class="row">
@@ -25,7 +22,6 @@
         <div class="col-md-9">{{ itm["value"]|safe }}</div>
         {% endif %}
     </div>
-    {% endif %}
     {% endfor %}
 </div>
 

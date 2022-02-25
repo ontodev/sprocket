@@ -141,33 +141,6 @@
 
 <div class="row" style="padding-left:10px; padding-right:10px;">
 	<div class="col">
-		{% if rows %}
-			{% set len = (rows|length + offset) %}
-		{% else %}
-			{% set len = offset + 1 %}
-		{% endif %}
-		{% if (limit + offset) > len %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
-		{% else %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
-		{% endif %}
-	</div>
-	<div class="col">
-		<div class="float-end">
-			{% if prev_url %}
-			<a href="{{ prev_url }}">Previous</a>
-			{% endif %}
-			{% if prev_url and next_url %}
-			&nbsp;|&nbsp;
-			{% endif %}
-			{% if next_url %}
-			<a href="{{ next_url }}">Next</a>
-			{% endif %}
-		</div>
-	</div>
-</div>
-<div class="row" style="padding-left:10px; padding-right:10px;">
-	<div class="col">
 		{% if not this_url.endswith('?') %}
 			{% set this_url = this_url + '&' %}
 		{% endif %}
@@ -231,8 +204,7 @@
 		// Update btn
 		var btn = document.getElementById(`expand${rowNum}`);
 		btn.href = `javascript:condense('${level}', '${msg}', ${rowNum}, ${cellNum})`;
-		var txt = document.getElementById(`expandInner${rowNum}`);
-		txt.innerText = "-";
+		btn.innerHTML = '<i class="bi-dash"></i>";
 	}
 
 	function reset() {

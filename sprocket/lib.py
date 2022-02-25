@@ -29,12 +29,11 @@ def exec_query(
     :param violations: violation level(s) to filter meta columns by (requires columns as well)
     :return: query results
     """
-    query = "SELECT rowid"
-    for s in select:
-        if s != "*":
-            query += f', "{s}"'
-        else:
-            query += ", *"
+    query = "SELECT"
+    if len(select) == 1 and select[0] == "*":
+        query += " *"
+    else:
+        query += ", ".join([f'"{x}"' for x in select])
     query += f' FROM "{table}"'
     const_dict = {}
     # Add keys for any where statements using user input values

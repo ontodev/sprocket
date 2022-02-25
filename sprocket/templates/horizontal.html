@@ -1,12 +1,39 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
+<div class="row" style="padding-left:10px; padding-right:10px;">
+	<div class="col">
+		{% if rows %}
+			{% set len = (rows|length + offset) %}
+		{% else %}
+			{% set len = offset + 1 %}
+		{% endif %}
+		{% if (limit + offset) > len %}
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
+		{% else %}
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
+		{% endif %}
+	</div>
+	<div class="col">
+		<div class="float-end">
+			{% if prev_url %}
+			<a href="{{ prev_url }}">Previous</a>
+			{% endif %}
+			{% if prev_url and next_url %}
+			&nbsp;|&nbsp;
+			{% endif %}
+			{% if next_url %}
+			<a href="{{ next_url }}">Next</a>
+			{% endif %}
+		</div>
+	</div>
+</div>
+
 <table class="table" id="sqlTableHorizontal">
 	<thead>
 		<tr>
 			{% if include_expand %} <th/> {% endif %}
 			{% for th in headers %}
-			{% if th != "rowid" %}
 			<th>
 				<div class="row justify-content-between">
 					<div class="col-auto">{{ th }}</div>
@@ -21,7 +48,6 @@
 					</div>
 				</div>
 			</th>
-			{% endif %}
 			{% endfor %}
 		</tr>
 	</thead>
@@ -33,19 +59,20 @@
 			{% set inner_vars = {'cell_num': 0} %}
 			{% if include_expand %}
 			<td>
-				<a class="btn btn-light sm-btn" type="button" id="vert{{ vars.row_num }}" href="javascript:vertical({{ vars.row_num }}, {{ offset }})"><p class="inner-btn">+</p></a>
+				<a class="btn btn-sm" id="vert{{ vars.row_num }}" href="javascript:vertical({{ vars.row_num }}, {{ offset }})"><i class="bi-plus-lg" style="color: #adb5bd;"></i></a>
 			</td>
 			{% endif %}
 			{% for itm in row %}
-			{% if itm["header"] != "rowid" %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 			{% if itm %}
 				{% if itm["style"] and itm["message"] %}
-					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
 						<div class="row justify-content-between">
-							<div class="col-auto">{{ itm["value"]|safe }}</div>
+							<div class="col-auto gy-1" id="value{{ vars.row_num }}-{{ inner_vars.cell_num }}">
+								{{ itm["value"]|safe }}
+							</div>
 							<div class="col-auto">
-								<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+								<a class="btn btn-sm" id="expand{{ vars.row_num }}-{{ inner_vars.cell_num }}" href="javascript:expand('{{ itm['style'] }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><i class="bi-plus"></i></a>
 							</div>
 						</div>
 					</td>
@@ -57,11 +84,38 @@
 			{% else %}
 			<td></td>
 			{% endif %}
-			{% endif %}
 			{% endfor %}
 		</tr>
 		{% endfor %}
 	</tbody>
 </table>
+
+<div class="row" style="padding-left:10px; padding-right:10px;">
+	<div class="col">
+		{% if rows %}
+			{% set len = (rows|length + offset) %}
+		{% else %}
+			{% set len = offset + 1 %}
+		{% endif %}
+		{% if (limit + offset) > len %}
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
+		{% else %}
+			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
+		{% endif %}
+	</div>
+	<div class="col">
+		<div class="float-end">
+			{% if prev_url %}
+			<a href="{{ prev_url }}">Previous</a>
+			{% endif %}
+			{% if prev_url and next_url %}
+			&nbsp;|&nbsp;
+			{% endif %}
+			{% if next_url %}
+			<a href="{{ next_url }}">Next</a>
+			{% endif %}
+		</div>
+	</div>
+</div>
 
 {% endblock %}
