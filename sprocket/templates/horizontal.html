@@ -14,6 +14,7 @@
 			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
 		{% endif %}
 	</div>
+	<!-- Pagination -->
 	<div class="col">
 		<div class="float-end">
 			{% if prev_url %}
@@ -36,10 +37,10 @@
 			{% for th in headers %}
 			<th>
 				<div class="row justify-content-between">
-					<div class="col-auto">{{ th }}</div>
+					<div class="col-auto gy-1">{{ th }}</div>
 					<div class="col-auto">
 						<div class="dropdown">
-							<button class="btn btn-light dropdown-toggle" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"> </button>
+							<button class="btn" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"><i class="bi-arrow-down-up"></i></button>
 							<ul class="dropdown-menu">
 								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
 								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
@@ -56,30 +57,40 @@
 		{% for row in rows %}
 		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
 		<tr id="row{{ vars.row_num }}">
+			{% if row["hide_in_row"] %}
+				<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
+				{% for key, value in row["hide_in_row"].items() %}
+				<td id="{{ key }}{{ vars.row_num }}" style="display: none;">{{ value }}</td>
+				{% endfor %}
+			{% endif %}
+			<!-- Track the cell numbers within this row -->
 			{% set inner_vars = {'cell_num': 0} %}
 			{% if include_expand %}
+			<!-- Show a plus button at the start of the row to switch to vertical view -->
 			<td>
-				<a class="btn btn-sm" id="vert{{ vars.row_num }}" href="javascript:vertical({{ vars.row_num }}, {{ offset }})"><i class="bi-plus-lg" style="color: #adb5bd;"></i></a>
+				<a class="btn btn-sm" id="vert{{ vars.row_num }}" href="javascript:showVertical({{ vars.row_num }}, {{ offset }})"><i class="bi-plus-lg" style="color: #adb5bd;"></i></a>
 			</td>
 			{% endif %}
-			{% for itm in row %}
+			{% for th in headers %}
+			{% set cell = row["cells"][th] %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
-			{% if itm %}
-				{% if itm["style"] and itm["message"] %}
-					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+			{% if cell %}
+				<!-- Each cell can have a style (in CSS) and a message (displayed as tooltip) -->
+				{% if cell["style"] and cell["message"] %}
+					<td class="bg-{{ cell['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">
 						<div class="row justify-content-between">
 							<div class="col-auto gy-1" id="value{{ vars.row_num }}-{{ inner_vars.cell_num }}">
-								{{ itm["value"]|safe }}
+								{{ cell["value"]|safe }}
 							</div>
 							<div class="col-auto">
-								<a class="btn btn-sm" id="expand{{ vars.row_num }}-{{ inner_vars.cell_num }}" href="javascript:expand('{{ itm['style'] }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><i class="bi-plus"></i></a>
+								<a class="btn btn-sm" id="expand{{ vars.row_num }}-{{ inner_vars.cell_num }}" href="javascript:expand('{{ cell['style'] }}', '{{ cell['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><i class="bi-plus"></i></a>
 							</div>
 						</div>
 					</td>
-				{% elif itm["style"] %}
-					<td class="bg-{{ itm['style'] }}">{{ itm["value"]|safe }}</td>
+				{% elif cell["style"] %}
+					<td class="bg-{{ cell['style'] }}">{{ cell["value"]|safe }}</td>
 				{% else %}
-					<td>{{ itm["value"]|safe }}</td>
+					<td>{{ cell["value"]|safe }}</td>
 				{% endif %}
 			{% else %}
 			<td></td>
@@ -103,6 +114,7 @@
 			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
 		{% endif %}
 	</div>
+	<!-- Pagniation -->
 	<div class="col">
 		<div class="float-end">
 			{% if prev_url %}

@@ -123,7 +123,7 @@
 										<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
 									</div>
 									<div class="col-auto">
-										<input type="button" onclick="submitForm({{ headers.keys() | list }}, {{ hidden.keys() | list }});" class="btn btn-primary" value="Update">
+										<input type="button" onclick="submitQueryForm({{ headers.keys() | list }}, {{ hidden.keys() | list }});" class="btn btn-primary" value="Update">
 									</div>
 								</div>
 							</div>
@@ -150,19 +150,16 @@
 
 {% if standalone %}
 <script>
-	// Enable tooltips
-	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-	  return new bootstrap.Tooltip(tooltipTriggerEl)
-	})
-
 	// Init headers
 	var headers = [];
 	{% for h in headers %}
 	headers.push('{{ h }}');
 	{% endfor %}
 
-	function condense(level, msg, rowNum, cellNum) {
+	function collapse(level, msg, rowNum, cellNum) {
+		/**
+		 * Collapse violation messages for a cell at given location.
+		 */
 		document.getElementById(`expandedRow${rowNum}`).remove();
 
 		// Add tooltip
@@ -180,6 +177,9 @@
 	}
 
 	function expand(level, msg, rowNum, cellNum) {
+		/**
+		 * Expand violation messages for a cell at given location.
+		 */
 		var row = document.getElementById(`row${rowNum}`);
 		var newHtml = `<tr id="expandedRow${rowNum}">`;
 		for (i=0; i < cellNum; i++) {
@@ -203,16 +203,23 @@
 
 		// Update btn
 		var btn = document.getElementById(`expand${rowNum}`);
-		btn.href = `javascript:condense('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+		btn.href = `javascript:collapse('${level}', '${msg}', ${rowNum}, ${cellNum})`;
 		btn.innerHTML = '<i class="bi-dash"></i>";
 	}
 
 	function reset() {
+		/**
+		 * Reset the query parameters to clear the form.
+		 */
 		var url = window.location.href.split('?')[0];
 		window.location.href = url;
 	}
 
 	function sort(col, desc) {
+		/**
+		 * Sort query results. The actual sorting is done server-side,
+		 * but this bit of script creates the correct query parameters.
+		 */
 		// Get current parameters
 		var qString = window.location.search;
 		var params = new URLSearchParams(qString);
@@ -243,7 +250,10 @@
 		}
 	}
 
-	function submitForm(headers, hidden) {
+	function submitQueryForm(headers, hidden) {
+		/**
+		 * Submit the form to update query parameters and change search results. Include hidden form elements.
+		 */
 		var args = []
 		headers = headers.filter(e => e !== "rowid");
 		// Get the where options
@@ -296,7 +306,10 @@
 		}
 	}
 
-	function vertical(rowNum, offset) {
+	function showVertical(rowNum, offset) {
+		/**
+		 * Show the given row in vertical view.
+		 */
 		var qString = window.location.search;
 		var params = new URLSearchParams(qString);
 		var newParams = [];
@@ -307,7 +320,6 @@
 				newParams.push(`${entry[0]}=${entry[1]}`);
 			}
 		}
-		console.log(newParams);
 		var newOS = rowNum + offset - 1;
 		newParams.push(`offset=${newOS}`);
 		newParams.push("limit=1");
@@ -315,6 +327,12 @@
 			window.location.href = "?" + newParams.join("&");
 		}
 	}
+
+	// Enable tooltips
+	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+	  return new bootstrap.Tooltip(tooltipTriggerEl)
+	})
 </script>
 {% endif %}
 

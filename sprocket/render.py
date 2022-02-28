@@ -42,6 +42,7 @@ def render_database_table(
     table,
     default_limit=100,
     display_messages=None,
+    hide_in_row=None,
     hide_meta=True,
     show_help=False,
     standalone=True,
@@ -57,6 +58,9 @@ def render_database_table(
     :param display_messages: dictionary containing messages to display as dismissible banners. The
                              dictionary can have the following keys: success, error, warn, info. The
                              values must be lists of string messages for that notification level.
+    :param hide_in_row: column names of which to include the values of as hidden cells in the HTML
+                        table. The element ID is the column name + HTML table row number
+                        (e.g., 'my_column1').
     :param hide_meta: if True, hide any columns ending with '_meta'. These will be used to format
                       the cell value and (maybe) error message of the matching column.
     :param show_help: if True, show descriptions for columns in single-row view.
@@ -130,7 +134,7 @@ def render_database_table(
         try:
             order_by = []
             for ob in parse_order_by(order):
-                s = [ob["key"]]
+                s = [f"{ob['key']}"]
                 if ob["order"]:
                     s.append(ob["order"].upper())
                 if ob["nulls"]:
@@ -152,6 +156,10 @@ def render_database_table(
 
     # Build & execute the query
     results = None
+    if hide_in_row and fmt == "html":
+        select_cols.extend(hide_in_row)
+        # Remove duplicates
+        select_cols = list(set(select_cols))
     if use_view:
         results = exec_query(
             conn,
@@ -183,6 +191,7 @@ def render_database_table(
             default_limit=default_limit,
             descriptions=descriptions,
             display_messages=display_messages,
+            hide_in_row=hide_in_row,
             standalone=standalone,
         )
     headers = results[0].keys()
@@ -208,6 +217,7 @@ def render_html_table(
     descriptions=None,
     display_messages=None,
     hidden=None,
+    hide_in_row=None,
     hide_meta=True,
     include_expand=True,
     show_options=True,
@@ -216,6 +226,11 @@ def render_html_table(
 ):
     """Render the results as an HTML table."""
     header_names = list(data[0].keys())
+    if "select" in request_args:
+        # Maybe filter the header names to get rid of cols we hide in the row
+        select_cols = request_args["select"].split(",")
+        if "*" not in select_cols:
+            header_names = select_cols
 
     # Clean up null values and add styles
     results = []
@@ -289,7 +304,7 @@ def render_html_table(
                 if len(messages) > 1:
                     messages = [f"({i}) {msg}" for i, msg in enumerate(messages, 1)]
                 res[value_col]["message"] = "<br>".join(messages)
-            res_updated.append(list(res.values()))
+            res_updated.append(res)
         results = res_updated
 
     offset = int(request_args.get("offset", "0"))
@@ -339,9 +354,6 @@ def render_html_table(
         for h in hidden:
             hidden_args[h] = request_args.get(h)
 
-    import logging
-
-    logging.error(display_messages)
     render_args = {
         "headers": headers,
         "hidden": hidden_args,
@@ -365,10 +377,30 @@ def render_html_table(
         render_args["row"] = results[0]
         template = "vertical.html"
     else:
-        render_args["rows"] = results
+        # Create the row to pass to template, to know what to display (hidden vs visible)
+        display_rows = []
+        for row in results:
+            hide_in_this_row = {}
+            if hide_in_row:
+                # Find the values, maybe delete the item if it shouldn't be included in display
+                for col in hide_in_row:
+                    hide_in_this_row[col] = row[col]["value"]
+                    if col not in header_names:
+                        del row[col]
+                        if col + "_meta" in row:
+                            del row[col + "_meta"]
+            display_rows.append({"cells": row, "hide_in_row": hide_in_this_row})
+        render_args["rows"] = display_rows
         template = "horizontal.html"
     t = template_env.get_template(template)
     return t.render(**render_args)
+
+
+def get_value_from_row(row, col):
+    for cell in row:
+        if cell["header"] == col:
+            return cell["value"]
+    return None
 
 
 def render_swagger_table(

@@ -2,24 +2,24 @@
 {% block subcontent %}
 
 <div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
-    {% for itm in row %}
+    {% for header, cell in row.items() %}
     <div class="row border-bottom">
         <div class="col-md-3">
             <div class="row">
                 <div class="col-auto">
-                    <b>{{ itm["header"] }}</b>
-                    {% if descriptions and itm["header"] in descriptions %}
-                    <button class="btn" data-bs-toggle="tooltip" data-bs-placement="right" title="{{ descriptions[itm['header']] }}"><i class="bi-question-circle"></i></button>
+                    <b>{{ header }}</b>
+                    {% if descriptions and header in descriptions %}
+                    <button class="btn" data-bs-toggle="tooltip" data-bs-placement="right" title="{{ descriptions[header] }}"><i class="bi-question-circle"></i></button>
                     {% endif %}
                 </div>
             </div>
         </div>
-        {% if itm["style"] and itm["message"] %}
-        <div class="col-md-9 bg-{{ itm['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">{{ itm["value"]|safe }}</div>
-        {% elif itm["style"] %}
-        <div class="col-md-9 bg-{{ itm['style'] }}">{{ itm["value"]|safe }}</div>
+        {% if cell["style"] and cell["message"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">{{ cell["value"]|safe }}</div>
+        {% elif cell["style"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}">{{ cell["value"]|safe }}</div>
         {% else %}
-        <div class="col-md-9">{{ itm["value"]|safe }}</div>
+        <div class="col-md-9">{{ cell["value"]|safe }}</div>
         {% endif %}
     </div>
     {% endfor %}

@@ -14,7 +14,7 @@ def exec_query(
     conn: Connection,
     table: str,
     columns: Optional[List[str]] = None,
-    select: List[str] = "*",
+    select: List[str] = None,
     where_statements: List[Tuple] = None,
     order_by: List[str] = None,
     violations: List[str] = None,
@@ -29,11 +29,16 @@ def exec_query(
     :param violations: violation level(s) to filter meta columns by (requires columns as well)
     :return: query results
     """
-    query = "SELECT"
-    if len(select) == 1 and select[0] == "*":
-        query += " *"
-    else:
-        query += ", ".join([f'"{x}"' for x in select])
+    if not select:
+        select = ["*"]
+    query = "SELECT "
+    select_strs = []
+    for s in select:
+        if s == "*":
+            select_strs.append("*")
+        else:
+            select_strs.append(f'"{s}"')
+    query += ", ".join(select_strs)
     query += f' FROM "{table}"'
     const_dict = {}
     # Add keys for any where statements using user input values
@@ -67,6 +72,7 @@ def exec_query(
         query += " OR ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
+
     query = sql_text(query)
     for k, v in const_dict.items():
         if isinstance(v, list):
