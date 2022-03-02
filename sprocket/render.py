@@ -259,7 +259,7 @@ def render_html_table(
                 del res[m]
                 if not meta:
                     continue
-                metadata = json.loads(meta[5:-1])
+                metadata = json.loads(meta)
 
                 if metadata.get("valid") and not metadata.get("nulltype"):
                     # Cell is not a null & is valid, nothing to style or change
