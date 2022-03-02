@@ -303,7 +303,7 @@ def render_html_table(
                 # Join multiple messages with line breaks
                 if len(messages) > 1:
                     messages = [f"({i}) {msg}" for i, msg in enumerate(messages, 1)]
-                res[value_col]["message"] = "<br>".join(messages)
+                res[value_col]["message"] = "<br>".join(messages).replace('"', "&quot;")
             res_updated.append(res)
         results = res_updated
 
