@@ -45,6 +45,7 @@ def render_database_table(
     hide_in_row=None,
     hide_meta=True,
     show_help=False,
+    show_options=True,
     standalone=True,
     use_view=True,
 ):
@@ -192,6 +193,7 @@ def render_database_table(
             descriptions=descriptions,
             display_messages=display_messages,
             hide_in_row=hide_in_row,
+            show_options=show_options,
             standalone=standalone,
         )
     headers = results[0].keys()
