@@ -66,6 +66,8 @@ def render_database_table(
                       the cell value and (maybe) error message of the matching column.
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
+    :param show_options: if True, show the accordion menu at the top of the page with the query
+                         parameter options.
     :param standalone: if True, include HTML headers & script in HTML output.
     :param use_view: if True, attempt to retrieve results from a '*_view' table which combines the
                       table and its conflict table."""
@@ -225,14 +227,41 @@ def render_html_table(
     show_options=True,
     standalone=True,
     total=None,
+    use_cols_as_headers=False,
 ):
-    """Render the results as an HTML table."""
-    header_names = list(data[0].keys())
-    if "select" in request_args:
+    """Render the results as an HTML table.
+
+    :param data:
+    :param table:
+    :param columns:
+    :param request_args:
+    :param base_url:
+    :param default_limit:
+    :param descriptions:
+    :param display_messages:
+    :param hidden:
+    :param hide_in_row:
+    :param hide_meta:
+    :param include_expand:
+    :param show_options: if True, show the accordion menu at the top of the page with the query
+                         parameter options.
+    :param standalone:
+    :param total:
+    :param use_cols_as_headers: if True, set headers of output to columns.
+                                Otherwise, use the 'select' query parameter to set headers.
+    :return:
+    """
+    if data:
+        header_names = list(data[0].keys())
+    else:
+        header_names = columns
+    if "select" in request_args and not use_cols_as_headers:
         # Maybe filter the header names to get rid of cols we hide in the row
         select_cols = request_args["select"].split(",")
         if "*" not in select_cols:
             header_names = select_cols
+    elif use_cols_as_headers:
+        header_names = columns
 
     # Clean up null values and add styles
     results = []
