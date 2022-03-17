@@ -24,7 +24,8 @@ def exec_query(
     :param table: name of the table to query
     :param columns: list of all columns in table (required for meta violation filtering)
     :param select: columns to select (default: *)
-    :param where_statements: WHERE constraints for the query as a list of tuples (operator, constraint)
+    :param where_statements: WHERE constraints for the query as a list of tuples
+                             (operator, constraint)
     :param order_by: list of columns to order results by
     :param violations: violation level(s) to filter meta columns by (requires columns as well)
     :return: query results
@@ -46,7 +47,8 @@ def exec_query(
         n = 0
         expanded_statements = []
         for ws, constraint in where_statements:
-            if not constraint:
+            if constraint is None:
+                # Do not use not constraint in case int 0 is provided
                 expanded_statements.append(ws)
                 continue
             k = f"const{n}"
@@ -241,12 +243,13 @@ def parse_order_by(order) -> List[dict]:
 
 def parse_where(where, column) -> Tuple[str, str]:
     """Create a where clause by parsing the horizontal filtering condition.
-    The WHERE is a tuple containing the operator (e.g., LIKE) and the constraint
-    (e.g., "foo", or None for some like NULL) so that we can use the constraints in parameterized queries.
+    The WHERE is a tuple containing the operator (e.g., LIKE) and the constraint (e.g., "foo", or
+    None for some like NULL) so that we can use the constraints in parameterized queries.
 
     :param where:
     :param column:
-    :return: a tuple containing a tuple (where statement, constraint) and an error message (None on success)"""
+    :return: a tuple containing a tuple (where statement, constraint) and an error message
+            (None on success)"""
     # Parse using Lark grammar
     parsed = PARSER.parse(where)
     res = SprocketTransformer().transform(parsed)
