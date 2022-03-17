@@ -215,7 +215,7 @@
 		window.location.href = url;
 	}
 
-	function sort(col, desc) {
+	function sort(col) {
 		/**
 		 * Sort query results. The actual sorting is done server-side,
 		 * but this bit of script creates the correct query parameters.
@@ -225,6 +225,7 @@
 		var params = new URLSearchParams(qString);
 		var newParams = [];
 		var newOrder = [];
+		var sortOrder = null;
 		// Add all current params to new params, only add order keys that are not col
 		for (var entry of params.entries()) {
 			if (entry[0] !== "order") {
@@ -233,20 +234,31 @@
 				for (var ord of entry[1].split(",")) {
 					if (!ord.startsWith(col + ".") && ord !== col) {
 						newOrder.push(ord);
+					} else if (ord == col) {
+						sortOrder = "asc";
+					} else {
+						sortOrder = ord.split(".")[1];
 					}
 				}
 			}
 		}
-		// Add this col to the order
-		if (desc) {
+
+		if (sortOrder === "asc") {
+			// Currently ascending, sort descending
 			newOrder.push(col + ".desc");
-		} else {
+		} else if (sortOrder == null) {
+			// Not currently sorted, sort ascending
 			newOrder.push(col);
 		}
+
 		// Redirect to new URL
-		newParams.push("order=" + newOrder.join(","));
+		if (newOrder.length > 0) {
+			newParams.push("order=" + newOrder.join(","));
+		}
 		if (newParams.length > 0) {
 			window.location.href = "?" + newParams.join("&");
+		} else {
+			window.location.href = window.location.href.split("?")[0];
 		}
 	}
 

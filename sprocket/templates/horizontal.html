@@ -40,11 +40,15 @@
 					<div class="col-auto gy-1">{{ th }}</div>
 					<div class="col-auto">
 						<div class="dropdown">
-							<button class="btn" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"><i class="bi-arrow-down-up"></i></button>
-							<ul class="dropdown-menu">
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
-							</ul>
+							<a class="btn" type="button" id="{{ th }}Sort" href="javascript:sort('{{ th }}')">
+								{% if th in sort_asc %}
+								<i class="bi-arrow-up"></i>
+								{% elif th in sort_desc %}
+								<i class="bi-arrow-down"></i>
+								{% else %}
+								<i class="bi-arrow-down-up"></i>
+								{% endif %}
+							</a>
 						</div>
 					</div>
 				</div>

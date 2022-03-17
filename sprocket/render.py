@@ -385,6 +385,17 @@ def render_html_table(
         for h in hidden:
             hidden_args[h] = request_args.get(h)
 
+    # Get the columns we're sorting by and put into appropriate list so we know which btn to show
+    order = request.args.get("order")
+    sort_asc = []
+    sort_desc = []
+    if order:
+        for ob in parse_order_by(order):
+            if ob["order"] == "asc":
+                sort_asc.append(ob["key"])
+            else:
+                sort_desc.append(ob["key"])
+
     render_args = {
         "headers": headers,
         "hidden": hidden_args,
@@ -397,6 +408,8 @@ def render_html_table(
         "prev_url": prev_url,
         "select": columns,
         "show_options": show_options,
+        "sort_asc": sort_asc,
+        "sort_desc": sort_desc,
         "standalone": standalone,
         "this_url": this_url,
         "title": table,
