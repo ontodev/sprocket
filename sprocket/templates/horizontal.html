@@ -60,7 +60,7 @@
 		{% set vars = {'row_num': 0} %}
 		{% for row in rows %}
 		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
-		<tr id="row{{ vars.row_num }}">
+		<tr id="row{{ vars.row_num }}" class="align-items-center">
 			{% if row["hide_in_row"] %}
 				<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
 				{% for key, value in row["hide_in_row"].items() %}

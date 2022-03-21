@@ -227,7 +227,6 @@ def render_html_table(
     show_options=True,
     standalone=True,
     total=None,
-    use_cols_as_headers=False,
 ):
     """Render the results as an HTML table.
 
@@ -247,21 +246,17 @@ def render_html_table(
                          parameter options.
     :param standalone:
     :param total:
-    :param use_cols_as_headers: if True, set headers of output to columns.
-                                Otherwise, use the 'select' query parameter to set headers.
     :return:
     """
     if data:
         header_names = list(data[0].keys())
     else:
         header_names = columns
-    if "select" in request_args and not use_cols_as_headers:
+    if "select" in request_args:
         # Maybe filter the header names to get rid of cols we hide in the row
         select_cols = request_args["select"].split(",")
         if "*" not in select_cols:
             header_names = select_cols
-    elif use_cols_as_headers:
-        header_names = columns
 
     # Clean up null values and add styles
     results = []

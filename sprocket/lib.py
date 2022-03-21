@@ -296,4 +296,4 @@ def parse_where(where, column) -> Tuple[str, str]:
             query_op = "IS"
     else:
         query_op = operator.upper()
-    return statement + f"{column} {query_op}", constraint
+    return statement + f'"{column}" {query_op}', constraint
