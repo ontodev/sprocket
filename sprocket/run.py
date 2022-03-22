@@ -44,7 +44,9 @@ def get_table_by_name(table):
     if CONN:
         return render_database_table(CONN, table, default_limit=DEFAULT_LIMIT)
     else:
-        return render_swagger_table(DB, table, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE)
+        return render_swagger_table(
+            DB, table, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE
+        )
 
 
 def prepare(db, table=None, limit=None):

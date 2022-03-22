@@ -44,6 +44,7 @@ def render_database_table(
     display_messages=None,
     hide_in_row=None,
     hide_meta=True,
+    ignore_params=None,
     show_help=False,
     show_options=True,
     standalone=True,
@@ -64,6 +65,7 @@ def render_database_table(
                         (e.g., 'my_column1').
     :param hide_meta: if True, hide any columns ending with '_meta'. These will be used to format
                       the cell value and (maybe) error message of the matching column.
+    :param ignore_params: list of query parameters to exclude from URL.
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
     :param show_options: if True, show the accordion menu at the top of the page with the query
@@ -195,6 +197,7 @@ def render_database_table(
             descriptions=descriptions,
             display_messages=display_messages,
             hide_in_row=hide_in_row,
+            ignore_params=ignore_params,
             show_options=show_options,
             standalone=standalone,
         )
@@ -223,6 +226,7 @@ def render_html_table(
     hidden=None,
     hide_in_row=None,
     hide_meta=True,
+    ignore_params=None,
     include_expand=True,
     show_options=True,
     standalone=True,
@@ -241,6 +245,7 @@ def render_html_table(
     :param hidden:
     :param hide_in_row:
     :param hide_meta:
+    :param ignore_params: list of query parameters to exclude from URLs
     :param include_expand:
     :param show_options: if True, show the accordion menu at the top of the page with the query
                          parameter options.
@@ -252,7 +257,7 @@ def render_html_table(
         header_names = list(data[0].keys())
     else:
         header_names = columns
-    if "select" in request_args:
+    if "select" in request_args and hide_in_row:
         # Maybe filter the header names to get rid of cols we hide in the row
         select_cols = request_args["select"].split(",")
         if "*" not in select_cols:
@@ -361,8 +366,14 @@ def render_html_table(
             headers[h] = {"options": FILTER_OPTS, "has_selected": False}
             continue
         cur_options = deepcopy(FILTER_OPTS)
-        opt = fltr.rsplit(".", 1)[0]
-        val = fltr.rsplit(".", 1)[1]
+        # Make sure to split correctly in case constraint has a dot
+        # The only time the filter has two dots is when not is used
+        if fltr.startswith("not"):
+            opt = ".".join(fltr.split(".", 2)[:2])
+            val = fltr.split(".", 2)[2]
+        else:
+            opt = fltr.split(".", 1)[0]
+            val = fltr.split(".", 1)[1]
         cur_options[opt]["selected"] = True
         headers[h] = {"options": cur_options, "const": val}
 
@@ -372,7 +383,7 @@ def render_html_table(
     if not base_url:
         base_url = "./" + table
     prev_url, next_url, this_url = get_urls(
-        base_url, request_args, total, offset=offset, limit=limit
+        base_url, request_args, total, ignore_params=ignore_params, offset=offset, limit=limit
     )
 
     hidden_args = {}

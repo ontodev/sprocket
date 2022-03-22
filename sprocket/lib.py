@@ -179,7 +179,11 @@ def get_swagger_tables(url):
     return [path[1:] for path, details in data["paths"].items() if path != "/" and "get" in details]
 
 
-def get_urls(base_url, request_args, total_results, offset=0, limit=100) -> Tuple[str, str, str]:
+def get_urls(
+    base_url, request_args, total_results, ignore_params=None, offset=0, limit=100
+) -> Tuple[str, str, str]:
+    if not ignore_params:
+        ignore_params = []
     # Get URLs for "previous" and "next" links
     prev_url = None
     next_url = None
@@ -190,18 +194,21 @@ def get_urls(base_url, request_args, total_results, offset=0, limit=100) -> Tupl
         if prev_offset < 0:
             prev_offset = 0
         prev_args["offset"] = prev_offset
-        prev_query = [f"{k}={v}" for k, v in prev_args.items()]
+        prev_query = [f"{k}={v}" for k, v in prev_args.items() if k not in ignore_params]
         prev_url = base_url + "?" + "&".join(prev_query)
     if limit + offset < total_results:
         # Only include "next" link if we aren't at the end
         next_args = request_args.copy()
         next_args["offset"] = limit + offset
-        next_query = [f"{k}={v}" for k, v in next_args.items()]
+        next_query = [f"{k}={v}" for k, v in next_args.items() if k not in ignore_params]
         next_url = base_url + "?" + "&".join(next_query)
 
     # Current URL is used for download links
-    this_url = base_url + "?" + "&".join([f"{k}={v}" for k, v in request_args.items()])
-
+    this_url = (
+        base_url
+        + "?"
+        + "&".join([f"{k}={v}" for k, v in request_args.items() if k not in ignore_params])
+    )
     return prev_url, next_url, this_url
 
 
