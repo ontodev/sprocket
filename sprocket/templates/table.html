@@ -267,13 +267,12 @@
 		 * Submit the form to update query parameters and change search results. Include hidden form elements.
 		 */
 		var args = []
-		headers = headers.filter(e => e !== "rowid");
 		// Get the where options
 		for (var h of headers) {
 			var operator = document.getElementById(h + 'Operator').value;
 			var constraint = document.getElementById(h + 'Constraint').value;
 			if (operator && constraint) {
-				args.push(h + "=" + operator + "." + constraint);
+				args.push(h + "=" + operator + "." + encodeURIComponent(constraint));
 			}
 		}
 
