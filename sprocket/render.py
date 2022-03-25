@@ -272,7 +272,7 @@ def render_html_table(
             if not v:
                 v = ""
                 style = "null"
-            values[k] = {"value": v, "style": style, "message": None, "header": k}
+            values[k] = {"value": str(v), "style": style, "message": None, "header": k}
         results.append(values)
 
     if hide_meta:

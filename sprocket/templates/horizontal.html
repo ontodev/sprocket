@@ -79,9 +79,14 @@
 			{% set cell = row["cells"][th] %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 			{% if cell %}
+				{% if cell["value"]|length > 100 and " " not in cell["value"] %}
+					{% set extra_class = " long-word" %}
+				{% else %}
+					{% set extra_class = "" %}
+				{% endif %}
 				<!-- Each cell can have a style (in CSS) and a message (displayed as tooltip) -->
 				{% if cell["style"] and cell["message"] %}
-					<td class="bg-{{ cell['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">
+					<td class="bg-{{ cell['style'] }}{{ extra_class }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">
 						<div class="row justify-content-between">
 							<div class="col-auto gy-1" id="value{{ vars.row_num }}-{{ inner_vars.cell_num }}">
 								{{ cell["value"]|safe }}
@@ -92,9 +97,9 @@
 						</div>
 					</td>
 				{% elif cell["style"] %}
-					<td class="bg-{{ cell['style'] }}">{{ cell["value"]|safe }}</td>
+					<td class="bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["value"]|safe }}</td>
 				{% else %}
-					<td>{{ cell["value"]|safe }}</td>
+					<td class="{{ extra_class }}">{{ cell["value"]|safe }}</td>
 				{% endif %}
 			{% else %}
 			<td></td>
