@@ -69,7 +69,7 @@ def exec_query(
         for m in meta_cols:
             likes = []
             for v in violations:
-                likes.append(f'trim({m}) LIKE \'%"level":"{v}"%\'')
+                likes.append(f'trim("{m}") LIKE \'%"level":"{v}"%\'')
             meta_filters.append("(" + " OR ".join(likes) + ")")
         query += " OR ".join(meta_filters)
     if order_by:
