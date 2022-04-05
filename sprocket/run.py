@@ -3,13 +3,13 @@ import shutil
 
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from flask import Flask, Blueprint, render_template
+from flask import abort, Flask, Blueprint, render_template, request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from typing import Optional
 from wsgiref.handlers import CGIHandler
 from .render import render_database_table, render_swagger_table
-from .lib import get_sql_tables, get_swagger_tables
+from .lib import get_sql_tables, get_swagger_tables, SprocketError
 
 BLUEPRINT = Blueprint(
     "sprocket",
@@ -29,7 +29,10 @@ SWAGGER_CACHE = ".swagger"
 @BLUEPRINT.route("/", methods=["GET"])
 def show_tables():
     if DEFAULT_TABLE:
-        return render_database_table(CONN, DEFAULT_TABLE)
+        try:
+            return render_database_table(CONN, DEFAULT_TABLE, request.args)
+        except SprocketError as e:
+            abort(422, str(e))
     if CONN:
         tables = get_sql_tables(CONN)
     else:
@@ -41,12 +44,15 @@ def show_tables():
 def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("test.html")
-    if CONN:
-        return render_database_table(CONN, table, default_limit=DEFAULT_LIMIT)
-    else:
-        return render_swagger_table(
-            DB, table, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE
-        )
+    try:
+        if CONN:
+            return render_database_table(CONN, table, request.args, default_limit=DEFAULT_LIMIT)
+        else:
+            return render_swagger_table(
+                DB, table, request.args, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE
+            )
+    except SprocketError as e:
+        abort(422, str(e))
 
 
 def prepare(db, table=None, limit=None):

@@ -14,12 +14,17 @@
                 </div>
             </div>
         </div>
-        {% if cell["style"] and cell["message"] %}
-        <div class="col-md-9 bg-{{ cell['style'] }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">{{ cell["value"]|safe }}</div>
-        {% elif cell["style"] %}
-        <div class="col-md-9 bg-{{ cell['style'] }}">{{ cell["value"]|safe }}</div>
+        {% if cell["value"]|length > 100 and " " not in cell["value"] %}
+            {% set extra_class = " long-word" %}
         {% else %}
-        <div class="col-md-9">{{ cell["value"]|safe }}</div>
+            {% set extra_class = "" %}
+        {% endif %}
+        {% if cell["style"] and cell["message"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">{{ cell["value"]|safe }}</div>
+        {% elif cell["style"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["value"]|safe }}</div>
+        {% else %}
+        <div class="col-md-9{{extra_class}}">{{ cell["value"]|safe }}</div>
         {% endif %}
     </div>
     {% endfor %}

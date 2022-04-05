@@ -61,11 +61,9 @@
 		{% for row in rows %}
 		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
 		<tr id="row{{ vars.row_num }}" class="align-items-center">
-			{% if row["hide_in_row"] %}
-				<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
-				{% for key, value in row["hide_in_row"].items() %}
-				<td id="{{ key }}{{ vars.row_num }}" style="display: none;">{{ value }}</td>
-				{% endfor %}
+			<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
+			{% if row["row_key"] %}
+			<td id="pk{{ vars.row_num }}" style="display: none;">{{ row["row_key"] }}</td>
 			{% endif %}
 			<!-- Track the cell numbers within this row -->
 			{% set inner_vars = {'cell_num': 0} %}

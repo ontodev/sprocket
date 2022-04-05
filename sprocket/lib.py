@@ -304,3 +304,7 @@ def parse_where(where, column) -> Tuple[str, str]:
     else:
         query_op = operator.upper()
     return statement + f'"{column}" {query_op}', constraint
+
+
+class SprocketError(RuntimeError):
+    """Base class for any runtime exceptions thrown in sprocket code."""

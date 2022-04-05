@@ -4,7 +4,7 @@ import os
 import requests
 
 from copy import deepcopy
-from flask import abort, render_template, request, Response
+from flask import render_template, Response
 from io import StringIO
 from jinja2 import Environment, PackageLoader
 from sqlalchemy.sql.expression import text as sql_text
@@ -16,6 +16,7 @@ from .lib import (
     get_urls,
     parse_order_by,
     parse_where,
+    SprocketError,
 )
 
 loader = PackageLoader("sprocket")
@@ -40,32 +41,35 @@ FILTER_OPTS = {
 def render_database_table(
     conn,
     table,
+    request_args,
     default_limit=100,
     display_messages=None,
-    hide_in_row=None,
     hide_meta=True,
+    ignore_cols=None,
     ignore_params=None,
+    primary_key=None,
     show_help=False,
     show_options=True,
     standalone=True,
     use_view=True,
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
-    containing TSV/CSV. Utilizes Flask request.args.
+    containing TSV/CSV. Utilizes Flask request_args to construct the query to return results.
 
     :param conn: database connection
     :param table: table name
+    :param request_args:
     :param default_limit: The max number of results to show per page, unless 'limit' is provided in
                         the query parameters.
     :param display_messages: dictionary containing messages to display as dismissible banners. The
                              dictionary can have the following keys: success, error, warn, info. The
                              values must be lists of string messages for that notification level.
-    :param hide_in_row: column names of which to include the values of as hidden cells in the HTML
-                        table. The element ID is the column name + HTML table row number
-                        (e.g., 'my_column1').
     :param hide_meta: if True, hide any columns ending with '_meta'. These will be used to format
                       the cell value and (maybe) error message of the matching column.
+    :param ignore_cols: list of columns of the SQL table to exclude from query/results.
     :param ignore_params: list of query parameters to exclude from URL.
+    :param primary_key: The column name to use as the primary key for the table. This value will be
+                        included as a hidden td in each table row with the HTML ID of pk{row_num}.
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
     :param show_options: if True, show the accordion menu at the top of the page with the query
@@ -75,7 +79,7 @@ def render_database_table(
                       table and its conflict table."""
     tables = get_sql_tables(conn)
     if table not in tables:
-        return abort(422, f"'{table}' is not a valid table in the database")
+        raise SprocketError(f"'{table}' is not a valid table in the database")
     table_cols = get_sql_columns(conn, table)
 
     descriptions = {}
@@ -88,31 +92,30 @@ def render_database_table(
         for res in results:
             descriptions[res["column"]] = res["description"]
 
-    limit = request.args.get("limit", default_limit)
+    limit = request_args.get("limit", default_limit)
     try:
         limit = int(limit)
     except ValueError:
-        return abort(422, "'limit' must be an integer")
+        raise SprocketError(f"'limit' ({limit}) must be an integer")
 
-    offset = request.args.get("offset", "0")
+    offset = request_args.get("offset", "0")
     try:
         offset = int(offset)
     except ValueError:
-        return abort(422, "'offset' must be an integer")
+        raise SprocketError(f"'offset' ({offset}) must be an integer")
 
     limit = limit + offset
 
-    fmt = request.args.get("format", "html")
+    fmt = request_args.get("format", "html")
     if fmt not in ["tsv", "csv", "html"]:
-        return abort(422, f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
+        raise SprocketError(f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
 
-    select = request.args.get("select")
+    select = request_args.get("select")
     if select:
         select_cols = select.split(",")
         invalid_cols = list(set(select_cols) - set(table_cols))
         if invalid_cols:
-            return abort(
-                422,
+            raise SprocketError(
                 f"The following column(s) do not exist in '{table}' table: "
                 + ", ".join(invalid_cols),
             )
@@ -120,21 +123,23 @@ def render_database_table(
             # Add any necessary meta cols, since they don't appear in select filters
             select_cols.extend([f"{x}_meta" for x in select_cols if f"{x}_meta" in table_cols])
     else:
-        select_cols = ["*"]
+        select_cols = table_cols
+    if ignore_cols:
+        select_cols = [x for x in select_cols if not x in ignore_cols]
 
     where_statements = []
     for tc in table_cols:
-        where = request.args.get(tc)
+        where = request_args.get(tc)
         if not where:
             continue
         try:
             stmt = parse_where(where, tc)
         except ValueError as e:
-            return abort(422, str(e))
+            return SprocketError(e)
         where_statements.append(stmt)
 
     order_by = []
-    order = request.args.get("order")
+    order = request_args.get("order")
     if order:
         try:
             order_by = []
@@ -146,31 +151,32 @@ def render_database_table(
                     s.append("NULLS " + ob["nulls"].upper())
                 order_by.append(" ".join(s))
         except ValueError as e:
-            return abort(422, str(e))
+            return SprocketError(e)
 
-    violations = request.args.get("violations")
+    violations = request_args.get("violations")
     if violations:
         violations = violations.split(",")
         for v in violations:
             if v not in ["debug", "info", "warn", "error"]:
-                return abort(
-                    422,
+                return SprocketError(
                     f"'violations' contains invalid level '{v}' - "
                     "must be one of: debug, info, warn, error",
                 )
 
     # Build & execute the query
     results = None
-    if hide_in_row and fmt == "html":
-        select_cols.extend(hide_in_row)
-        # Remove duplicates
-        select_cols = list(set(select_cols))
+    if primary_key and fmt == "html" and primary_key not in select_cols:
+        # We always need the primary key, even if it's hidden from select query param
+        query_cols = deepcopy(select_cols)
+        query_cols.insert(0, primary_key)
+    else:
+        query_cols = select_cols
     if use_view:
         results = exec_query(
             conn,
             table + "_view",
             columns=table_cols,
-            select=select_cols,
+            select=query_cols,
             where_statements=where_statements,
             order_by=order_by,
             violations=violations,
@@ -180,7 +186,7 @@ def render_database_table(
             conn,
             table,
             columns=table_cols,
-            select=select_cols,
+            select=query_cols,
             where_statements=where_statements,
             order_by=order_by,
             violations=violations,
@@ -191,13 +197,13 @@ def render_database_table(
         return render_html_table(
             results,
             table,
-            table_cols,
-            request.args,
+            request_args,
+            columns=select_cols,
             default_limit=default_limit,
             descriptions=descriptions,
             display_messages=display_messages,
-            hide_in_row=hide_in_row,
             ignore_params=ignore_params,
+            primary_key=primary_key,
             show_options=show_options,
             standalone=standalone,
         )
@@ -217,17 +223,17 @@ def render_database_table(
 def render_html_table(
     data,
     table,
-    columns,
     request_args,
     base_url=None,
+    columns=None,
     default_limit=100,
     descriptions=None,
     display_messages=None,
     hidden=None,
-    hide_in_row=None,
     hide_meta=True,
     ignore_params=None,
     include_expand=True,
+    primary_key=None,
     show_options=True,
     standalone=True,
     total=None,
@@ -236,28 +242,31 @@ def render_html_table(
 
     :param data:
     :param table:
-    :param columns:
     :param request_args:
     :param base_url:
+    :param columns: Optional list of column names to display as headers of the HTML table.
+                    If not provided, the keys of the first element of data are used as headers.
     :param default_limit:
     :param descriptions:
     :param display_messages:
     :param hidden:
-    :param hide_in_row:
     :param hide_meta:
     :param ignore_params: list of query parameters to exclude from URLs
     :param include_expand:
+    :param primary_key: The column name to use as the primary key for the table. This value will be
+                        included as a hidden td in each table row with the HTML ID of pk{row_num}.
     :param show_options: if True, show the accordion menu at the top of the page with the query
                          parameter options.
     :param standalone:
     :param total:
     :return:
     """
-    if data:
-        header_names = list(data[0].keys())
-    else:
+    if columns:
         header_names = columns
-    if "select" in request_args and hide_in_row:
+    else:
+        header_names = list(data[0].keys())
+
+    if "select" in request_args and primary_key:
         # Maybe filter the header names to get rid of cols we hide in the row
         select_cols = request_args["select"].split(",")
         if "*" not in select_cols:
@@ -280,7 +289,8 @@ def render_html_table(
         meta_names = [x for x in header_names if x.endswith("_meta")]
         header_names = [x for x in header_names if x not in meta_names]
         # also update columns for selections
-        columns = [x for x in columns if not x.endswith("_meta")]
+        if columns:
+            columns = [x for x in columns if not x.endswith("_meta")]
         # iter through results and update
         res_updated = []
         for res in results:
@@ -392,7 +402,7 @@ def render_html_table(
             hidden_args[h] = request_args.get(h)
 
     # Get the columns we're sorting by and put into appropriate list so we know which btn to show
-    order = request.args.get("order")
+    order = request_args.get("order")
     sort_asc = []
     sort_desc = []
     if order:
@@ -430,16 +440,17 @@ def render_html_table(
         # Create the row to pass to template, to know what to display (hidden vs visible)
         display_rows = []
         for row in results:
-            hide_in_this_row = {}
-            if hide_in_row:
-                # Find the values, maybe delete the item if it shouldn't be included in display
-                for col in hide_in_row:
-                    hide_in_this_row[col] = row[col]["value"]
-                    if col not in header_names:
-                        del row[col]
-                        if col + "_meta" in row:
-                            del row[col + "_meta"]
-            display_rows.append({"cells": row, "hide_in_row": hide_in_this_row})
+            # Find the values, maybe delete the item if it shouldn't be included in display
+            if primary_key:
+                key_val = row[primary_key]["value"]
+                if primary_key not in header_names:
+                    del row[primary_key]
+                    if primary_key + "_meta" in row:
+                        del row[primary_key + "_meta"]
+            else:
+                key_val = None
+            display_rows.append({"cells": row, "row_key": key_val})
+
         render_args["rows"] = display_rows
         template = "horizontal.html"
     t = template_env.get_template(template)
@@ -454,13 +465,15 @@ def get_value_from_row(row, col):
 
 
 def render_swagger_table(
-    swagger_url, table, default_limit=100, standalone=False, swagger_cache=".swagger"
+    swagger_url, table, request_args, default_limit=100, standalone=False, swagger_cache=".swagger"
 ):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
-    or a Response object containing TSV/CSV. Utilizes Flask request.args.
+    or a Response object containing TSV/CSV. Uses query parameters (request_args) to construct query
+    to return results.
 
     :param swagger_url: URL to remote database (Swagger)
     :param table: table name
+    :param request_args:
     :param default_limit: if limit parameter is not provided, default number of results to show
     :param standalone: if True, include HTML headers & script in HTML output.
     :param swagger_cache: directory to store Swagger details
@@ -477,7 +490,7 @@ def render_swagger_table(
     # Parse args and create request
     fmt = None
     has_limit = False
-    for arg, value in request.args.items():
+    for arg, value in request_args.items():
         if arg == "select":
             get_all_columns = True
         if arg == "limit":
@@ -526,8 +539,8 @@ def render_swagger_table(
     return render_html_table(
         data,
         table,
-        columns,
-        request.args,
+        request_args,
+        columns=columns,
         total=total,
         default_limit=default_limit,
         standalone=standalone,
