@@ -55,7 +55,6 @@ def render_database_table(
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
     containing TSV/CSV. Utilizes Flask request_args to construct the query to return results.
-
     :param conn: database connection
     :param table: table name
     :param request_args:
@@ -125,7 +124,9 @@ def render_database_table(
     else:
         select_cols = table_cols
     if ignore_cols:
-        select_cols = [x for x in select_cols if not x in ignore_cols]
+        select_cols = [x for x in select_cols if x not in ignore_cols]
+
+    import logging
 
     where_statements = []
     for tc in table_cols:
@@ -170,7 +171,9 @@ def render_database_table(
         query_cols = deepcopy(select_cols)
         query_cols.insert(0, primary_key)
     else:
-        query_cols = select_cols
+        query_cols = deepcopy(select_cols)
+    if "row_number" in table_cols:
+        query_cols.insert(0, "row_number")
     if use_view:
         results = exec_query(
             conn,
@@ -216,7 +219,7 @@ def render_database_table(
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results)[offset : limit + offset])
+    writer.writerows(list(results)[offset: limit + offset])
     return Response(output.getvalue(), mimetype=mt)
 
 
@@ -226,6 +229,7 @@ def render_html_table(
     request_args,
     base_url=None,
     columns=None,
+    conflict_prefix="row/",
     default_limit=100,
     descriptions=None,
     display_messages=None,
@@ -246,6 +250,8 @@ def render_html_table(
     :param base_url:
     :param columns: Optional list of column names to display as headers of the HTML table.
                     If not provided, the keys of the first element of data are used as headers.
+    :param conflict_prefix: Prefix to use for row_number when primary_key is provided and there is a
+                            primary_key conflict, e.g. row/32.
     :param default_limit:
     :param descriptions:
     :param display_messages:
@@ -309,6 +315,16 @@ def render_html_table(
                 # This is the name of the column we are editing
                 value_col = m[:-5]
                 # Set the value to what is given in the JSON (as "value")
+                # unless there is a primary key conflict, in which case use conflict format
+                pk_value = None
+                if primary_key and value_col == primary_key and "row_number" in res:
+                    # Determine if the there is a conflict
+                    for msg in metadata["messages"]:
+                        if msg["rule"] == "key:primary":
+                            pk_value = f"{conflict_prefix}{res['row_number']['value']}"
+                if not pk_value:
+                    pk_value = metadata["value"]
+                res[value_col]["conflict_key"] = pk_value
                 res[value_col]["value"] = metadata["value"]
                 if "nulltype" in metadata:
                     # Set null style and go to next
@@ -433,6 +449,9 @@ def render_html_table(
         "violations": violations,
     }
     if limit == 1 or total == 1:
+        import logging
+        logging.error(results[0])
+        logging.error(headers)
         render_args["descriptions"] = descriptions
         render_args["row"] = results[0]
         template = "vertical.html"
@@ -442,7 +461,8 @@ def render_html_table(
         for row in results:
             # Find the values, maybe delete the item if it shouldn't be included in display
             if primary_key:
-                key_val = row[primary_key]["value"]
+                # Key value is either the conflict key or just the value of the primary key col
+                key_val = row[primary_key].get("conflict_key", row[primary_key]["value"])
                 if primary_key not in header_names:
                     del row[primary_key]
                     if primary_key + "_meta" in row:

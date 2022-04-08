@@ -2,7 +2,8 @@
 {% block subcontent %}
 
 <div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
-    {% for header, cell in row.items() %}
+    {% for header in headers %}
+    {% set cell = row[header] %}
     <div class="row border-bottom align-items-center">
         <div class="col-md-3">
             <div class="row">
