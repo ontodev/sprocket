@@ -449,9 +449,6 @@ def render_html_table(
         "violations": violations,
     }
     if limit == 1 or total == 1:
-        import logging
-        logging.error(results[0])
-        logging.error(headers)
         render_args["descriptions"] = descriptions
         render_args["row"] = results[0]
         template = "vertical.html"
