@@ -181,35 +181,52 @@ def get_swagger_tables(url):
 
 def get_urls(
     base_url, request_args, total_results, ignore_params=None, offset=0, limit=100
-) -> Tuple[str, str, str]:
+) -> dict:
     if not ignore_params:
         ignore_params = []
     # Get URLs for "previous" and "next" links
+    first_url = None
     prev_url = None
     next_url = None
+    last_url = None
     if offset > 0:
-        # Only include "previous" link if we aren't at the beginning
+        # Only include "previous" and "first" if we aren't at the beginning
         prev_args = request_args.copy()
         prev_offset = offset - limit
         if prev_offset < 0:
             prev_offset = 0
         prev_args["offset"] = prev_offset
         prev_query = [f"{k}={v}" for k, v in prev_args.items() if k not in ignore_params]
-        prev_url = base_url + "?" + "&".join(prev_query)
+        prev_url = base_url
+        if prev_query:
+            prev_url += "?" + "&".join(prev_query)
+
+        del prev_args["offset"]
+        first_query = [f"{k}={v}" for k, v in prev_args.items() if k not in ignore_params]
+        first_url = base_url
+        if first_query:
+            first_url += "?" + "&".join(prev_query)
     if limit + offset < total_results:
-        # Only include "next" link if we aren't at the end
+        # Only include "next" and "last" link if we aren't at the end
         next_args = request_args.copy()
         next_args["offset"] = limit + offset
         next_query = [f"{k}={v}" for k, v in next_args.items() if k not in ignore_params]
-        next_url = base_url + "?" + "&".join(next_query)
+        next_url = base_url
+        if next_query:
+            next_url += "?" + "&".join(next_query)
 
-    # Current URL is used for download links
-    this_url = (
-        base_url
-        + "?"
-        + "&".join([f"{k}={v}" for k, v in request_args.items() if k not in ignore_params])
-    )
-    return prev_url, next_url, this_url
+        next_args["offset"] = total_results - limit
+        last_query = [f"{k}={v}" for k, v in next_args.items() if k not in ignore_params]
+        last_url = base_url
+        if last_query:
+            last_url += "?" + "&".join(last_query)
+
+    # Current URL is used for download links (always include ?)
+    this_query = [f"{k}={v}" for k, v in request_args.items() if k not in ignore_params]
+    this_url = base_url + "?"
+    if this_query:
+        this_url += "&".join(this_query)
+    return {"first": first_url, "prev": prev_url, "next": next_url, "last": last_url, "this": this_url}
 
 
 def parse_order_by(order) -> List[dict]:

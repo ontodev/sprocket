@@ -1,30 +1,33 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
-<div class="row" style="padding-left:10px; padding-right:10px;">
-	<div class="col">
+<div class="row justify-content-end px-0 py-2">
+	<!-- Pagniation -->
+	<div class="col-auto px-0">
 		{% if rows %}
 			{% set len = (rows|length + offset) %}
 		{% else %}
 			{% set len = offset + 1 %}
 		{% endif %}
-		{% if (limit + offset) > len %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
-		{% else %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
-		{% endif %}
-	</div>
-	<!-- Pagination -->
-	<div class="col">
-		<div class="float-end">
-			{% if prev_url %}
-			<a href="{{ prev_url }}">Previous</a>
+		<div class="btn-group">
+			{% if urls["prev"] %}
+				<a href="{{ urls['first'] }}" class="btn btn-outline-primary">first</a>
+				<a href="{{ urls['prev'] }}" class="btn btn-outline-primary">prev</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">first</a>
+				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
 			{% endif %}
-			{% if prev_url and next_url %}
-			&nbsp;|&nbsp;
+			{% if (limit + offset) > len %}
+				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ len }} of {{ total }}</a>
+			{% else %}
+				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ limit + offset }} of {{ total }}</a>
 			{% endif %}
-			{% if next_url %}
-			<a href="{{ next_url }}">Next</a>
+			{% if urls["next"] %}
+				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
+				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">next</a>
+				<a href="#" class="btn btn-outline-secondary disabled">last</a>
 			{% endif %}
 		</div>
 	</div>
@@ -107,34 +110,5 @@
 		{% endfor %}
 	</tbody>
 </table>
-
-<div class="row" style="padding-left:10px; padding-right:10px;">
-	<div class="col">
-		{% if rows %}
-			{% set len = (rows|length + offset) %}
-		{% else %}
-			{% set len = offset + 1 %}
-		{% endif %}
-		{% if (limit + offset) > len %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
-		{% else %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
-		{% endif %}
-	</div>
-	<!-- Pagniation -->
-	<div class="col">
-		<div class="float-end">
-			{% if prev_url %}
-			<a href="{{ prev_url }}">Previous</a>
-			{% endif %}
-			{% if prev_url and next_url %}
-			&nbsp;|&nbsp;
-			{% endif %}
-			{% if next_url %}
-			<a href="{{ next_url }}">Next</a>
-			{% endif %}
-		</div>
-	</div>
-</div>
 
 {% endblock %}

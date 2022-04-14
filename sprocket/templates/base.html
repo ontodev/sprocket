@@ -4,37 +4,67 @@
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet">
 	<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.5.0/font/bootstrap-icons.css" rel="stylesheet">
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
-	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
 	<style>
-		#sqlTableHorizontal, #sqlTableVertical {
-			vertical-align: inherit !important;
+		table {
+		  border-collapse: separate;
+		  border-spacing: 0px;
 		}
+		thead th {
+		  position: sticky;
+		  top: 0px;
+		  white-space: nowrap;
+		  background-color: #fff !important;
+		  border-bottom-width: 1px;
+		  z-index: 2;
+		}
+		tbody {
+		  z-index: 1;
+		}
+		td {
+		  vertical-align: middle;
+		}
+		td ul {
+		  margin-left: -1rem !important;
+		  margin-block: 0rem !important;
+		}
+		p {
+		  margin-bottom: 0rem !important;
+		}
+
+		.long-word {
+		  word-break: break-all;
+		}
+
 		.bg-debug {
-			background-color: #abc4ff !important;
+		  background-color: #abc4ff !important;
 		}
 		.bg-error {
-			background-color: #ffabab !important;
+		  background-color: #ffabab !important;
 		}
 		.bg-info {
-			background-color: #fff8ab !important;
+		  background-color: #fff8ab !important;
 		}
 		.bg-null {
-			background-color: #ededed !important;
+		  color: #cfcfcf;
+		}
+		.bg-null:before {
+		  content: "null";
 		}
 		.bg-warn {
-			background-color: #ffcdab !important;
-		}
-		.inner-btn {
-			margin-top: -11px;
-			margin-left: -3px;
-		}
-		.sm-btn {
-			height: 18px;
-			width: 30px;
+		  background-color: #ffcdab !important;
 		}
 		.tooltip-inner {
-			white-space: pre-wrap;
+		  white-space: pre-wrap;
+		}
+
+		#sqlTableHorizontal, #sqlTableVertical {
+		  vertical-align: inherit !important;
+		}
+		#sqlTableVertical {
+		  margin: 1rem
+		}
+		#sqlTableVertical .row {
+		  padding: 0.2rem 0rem 0.2rem 0rem;
 		}
 	</style>
 	{% if title %}
@@ -46,6 +76,213 @@
 	{% block content %}
 	{{ default|safe }}
 	{% endblock %}
+{% if javascript %}
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+	// Init headers
+	var headers = [];
+	{% for h in headers %}
+	headers.push('{{ h }}');
+	{% endfor %}
+
+	function collapse(level, msg, rowNum, cellNum) {
+		/**
+		 * Collapse violation messages for a cell at given location.
+		 */
+		// Remove the message from the value of the cell
+		var value = document.getElementById(`value${rowNum}-${cellNum}`);
+		value.innerText = value.innerText.replace(`\n${msg}`, "");
+
+		// Add tooltip
+		var td = document.getElementById(`td${rowNum}-${cellNum}`);
+		td.setAttribute("data-bs-toggle", "tooltip");
+		td.setAttribute("data-bs-placement", "bottom");
+		td.setAttribute("data-bs-original-title", msg);
+		td.setAttribute("title", msg);
+
+		// Update btn
+		var btn = document.getElementById(`expand${rowNum}-${cellNum}`);
+		btn.href = `javascript:expand('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+		btn.innerHTML = '<i class="bi-plus"></i>';
+	}
+
+	function expand(level, msg, rowNum, cellNum) {
+		/**
+		 * Expand violation messages for a cell at given location.
+		 */
+		// Get the current cell value & add the message below
+		var value = document.getElementById(`value${rowNum}-${cellNum}`);
+		value.innerHTML = value.innerText + `<br><small class="fst-italic">${msg}</small>`;
+
+		// Remove tooltip
+		var td = document.getElementById(`td${rowNum}-${cellNum}`);
+		var tooltipID = td.getAttribute("aria-describedby");
+		td.removeAttribute("data-bs-toggle");
+		td.removeAttribute("data-bs-placement");
+		td.removeAttribute("data-bs-original-title");
+		td.removeAttribute("title");
+		td.removeAttribute("aria-describedby");
+		var tt = document.getElementById(tooltipID);
+		if (tt !== null) {
+			tt.remove();
+		}
+
+		// Update btn
+		var btn = document.getElementById(`expand${rowNum}-${cellNum}`);
+		btn.href = `javascript:collapse('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+		btn.innerHTML = '<i class="bi-dash"></i>';
+	}
+
+	function jump(curOffset) {
+		var newOffset = prompt("Jump to row", curOffset);
+		if (newOffset) {
+			var url = new URL(window.location.href);
+			url.searchParams.set("offset", newOffset);
+			window.location.href = url;
+		}
+	}
+
+	function reset() {
+		/**
+		 * Reset the query parameters to clear the form.
+		 */
+		var url = window.location.href.split('?')[0];
+		window.location.href = url;
+	}
+
+	function sort(col) {
+		/**
+		 * Sort query results. The actual sorting is done server-side,
+		 * but this bit of script creates the correct query parameters.
+		 */
+		// Get current parameters
+		var qString = window.location.search;
+		var params = new URLSearchParams(qString);
+		var newParams = [];
+		var newOrder = [];
+		var sortOrder = null;
+		// Add all current params to new params, only add order keys that are not col
+		for (var entry of params.entries()) {
+			if (entry[0] !== "order") {
+				newParams.push(`${entry[0]}=${entry[1]}`);
+			} else {
+				for (var ord of entry[1].split(",")) {
+					if (!ord.startsWith(col + ".") && ord !== col) {
+						newOrder.push(ord);
+					} else if (ord == col) {
+						sortOrder = "asc";
+					} else {
+						sortOrder = ord.split(".")[1];
+					}
+				}
+			}
+		}
+
+		if (sortOrder === "asc") {
+			// Currently ascending, sort descending
+			newOrder.push(col + ".desc");
+		} else if (sortOrder == null) {
+			// Not currently sorted, sort ascending
+			newOrder.push(col);
+		}
+
+		// Redirect to new URL
+		if (newOrder.length > 0) {
+			newParams.push("order=" + newOrder.join(","));
+		}
+		if (newParams.length > 0) {
+			window.location.href = "?" + newParams.join("&");
+		} else {
+			window.location.href = window.location.href.split("?")[0];
+		}
+	}
+
+	function submitQueryForm(headers, hidden) {
+		/**
+		 * Submit the form to update query parameters and change search results. Include hidden form elements.
+		 */
+		var args = []
+		// Get the where options
+		for (var h of headers) {
+			var operator = document.getElementById(h + 'Operator').value;
+			var constraint = document.getElementById(h + 'Constraint').value;
+			if (operator && constraint) {
+				args.push(h + "=" + operator + "." + encodeURIComponent(constraint));
+			}
+		}
+
+		// Get any hidden args
+		for (var h of hidden) {
+			var val = document.getElementById(h).value;
+			args.push(h + "=" + val);
+		}
+
+		// Get the select options
+		var n = document.getElementsByName('select[]');
+		var s = [];
+		for (i=0; i < (n.length); i++) {
+			if (n[i].checked) {
+				s.push(n[i].value);
+			}
+		}
+		if (s.length > 0 && s.length < headers.length) {
+			args.push("select=" + s.join(","));
+		}
+
+		// Get the violation filters
+		var n = document.getElementsByName('violation[]');
+		var v = [];
+		for (i=0;i < (n.length); i++) {
+			console.log(n[i].checked);
+			if (n[i].checked) {
+				v.push(n[i].value);
+			}
+		}
+		if (v.length > 0) {
+			args.push("violations=" + v.join(","));
+		}
+
+		// Get the limit option
+		var l = document.getElementById("limitValue").value;
+		args.push("limit=" + l);
+
+		// Redirect to new URL
+		if (args.length > 0) {
+			window.location.href = "?" + args.join("&")
+		}
+	}
+
+	function showVertical(rowNum, offset) {
+		/**
+		 * Show the given row in vertical view.
+		 */
+		var qString = window.location.search;
+		var params = new URLSearchParams(qString);
+		var newParams = [];
+		for (var entry of params.entries()) {
+			if (entry[0] === "limit" || entry[0] === "offset") {
+				continue;
+			} else {
+				newParams.push(`${entry[0]}=${entry[1]}`);
+			}
+		}
+		var newOS = rowNum + offset - 1;
+		newParams.push(`offset=${newOS}`);
+		newParams.push("limit=1");
+		if (newParams.length > 0) {
+			window.location.href = "?" + newParams.join("&");
+		}
+	}
+
+	// Enable tooltips
+	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+	  return new bootstrap.Tooltip(tooltipTriggerEl)
+	})
+</script>
+{% endif %}
 {% if standalone %}
 </body>
 </html>

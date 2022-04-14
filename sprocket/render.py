@@ -47,6 +47,7 @@ def render_database_table(
     hide_meta=True,
     ignore_cols=None,
     ignore_params=None,
+    javascript=True,
     primary_key=None,
     show_help=False,
     show_options=True,
@@ -126,8 +127,6 @@ def render_database_table(
     if ignore_cols:
         select_cols = [x for x in select_cols if x not in ignore_cols]
 
-    import logging
-
     where_statements = []
     for tc in table_cols:
         where = request_args.get(tc)
@@ -206,6 +205,7 @@ def render_database_table(
             descriptions=descriptions,
             display_messages=display_messages,
             ignore_params=ignore_params,
+            javascript=javascript,
             primary_key=primary_key,
             show_options=show_options,
             standalone=standalone,
@@ -237,6 +237,7 @@ def render_html_table(
     hide_meta=True,
     ignore_params=None,
     include_expand=True,
+    javascript=True,
     primary_key=None,
     show_options=True,
     standalone=True,
@@ -408,7 +409,7 @@ def render_html_table(
 
     if not base_url:
         base_url = "./" + table
-    prev_url, next_url, this_url = get_urls(
+    urls = get_urls(
         base_url, request_args, total, ignore_params=ignore_params, offset=offset, limit=limit
     )
 
@@ -432,20 +433,19 @@ def render_html_table(
         "headers": headers,
         "hidden": hidden_args,
         "include_expand": include_expand,
+        "javascript": javascript,
         "limit": limit,
         "messages": display_messages,
-        "next_url": next_url,
         "offset": offset,
         "options": options,
-        "prev_url": prev_url,
         "select": columns,
         "show_options": show_options,
         "sort_asc": sort_asc,
         "sort_desc": sort_desc,
         "standalone": standalone,
-        "this_url": this_url,
         "title": table,
         "total": total,
+        "urls": urls,
         "violations": violations,
     }
     if limit == 1 or total == 1:
@@ -482,7 +482,7 @@ def get_value_from_row(row, col):
 
 
 def render_swagger_table(
-    swagger_url, table, request_args, default_limit=100, standalone=False, swagger_cache=".swagger"
+    swagger_url, table, request_args, default_limit=100, javascript=True, standalone=False, swagger_cache=".swagger"
 ):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
     or a Response object containing TSV/CSV. Uses query parameters (request_args) to construct query
@@ -560,6 +560,7 @@ def render_swagger_table(
         columns=columns,
         total=total,
         default_limit=default_limit,
+        javascript=javascript,
         standalone=standalone,
     )
 
