@@ -184,6 +184,16 @@
 		window.location.href = url;
 	}
 
+	function submitForm(col) {
+		var url = new URL(window.location.href);
+		var operator = document.getElementById(`${col.replace(" ", "_")}Operator`).value;
+		var constraint = document.getElementById(`${col.replace(" ", "_")}Constraint`).value;
+		if (operator && constraint) {
+			url.searchParams.set(col, operator + "." + encodeURIComponent(constraint));
+			window.location.href = url;
+		}
+	}
+
 	function submitQueryForm(headers, hidden) {
 		/**
 		 * Submit the form to update query parameters and change search results. Include hidden form elements.

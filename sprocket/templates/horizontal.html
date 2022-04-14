@@ -118,9 +118,35 @@
 				<div class="row">
 					<a href="javascript:hide('{{ th }}')"><i class="bi-eye-slash"></i> Hide column</a>
 				</div>
+				<hr/>
+				<div class="row"><div class="col-auto pb-2">Filter by condition</div></div>
+				<div class="row">
+					{% set details = headers[th] %}
+					<div class="col-md-5">
+						<select class="form-select" id="{{ th | replace(' ', '_') }}Operator" name="operator">
+							{% if not details.has_selected %}
+							<option selected></option>
+							{% endif %}
+							{% for val, optdetails in details.options.items() %}
+								{% if optdetails.selected %}
+								<option value="{{ val }}" selected>{{ optdetails.label }}</option>
+								{% else %}
+								<option value="{{ val }}">{{ optdetails.label }}</option>
+								{% endif %}
+							{% endfor %}
+						</select>
+					</div>
+					<div class="col-md-7">
+						{% if details.const %}
+						<input class="form-control" id="{{ th | replace(' ', '_') }}Constraint" name="constraint" type="text" value="{{ details.const }}">
+						{% else %}
+						<input class="form-control" id="{{ th | replace(' ', '_') }}Constraint" name="constraint" type="text">
+						{% endif %}
+					</div>
+				</div>
 			</div>
 			<div class="modal-footer">
-        		<button type="button" class="btn btn-sm btn-primary">Update</button>
+        		<a type="button" class="btn btn-sm btn-primary" href="javascript:submitForm('{{ th }}')">Update</a>
 			</div>
 		</div>
 	</div>
