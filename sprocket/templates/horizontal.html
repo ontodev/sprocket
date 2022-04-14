@@ -2,6 +2,9 @@
 {% block subcontent %}
 
 <div class="row justify-content-end px-0 py-2">
+	<div class="col-auto">
+		<a class="btn btn-outline-primary" href="javascript:reset()">Reset</a>
+	</div>
 	<!-- Pagniation -->
 	<div class="col-auto px-0">
 		{% if rows %}
@@ -38,23 +41,8 @@
 		<tr>
 			{% if include_expand %} <th/> {% endif %}
 			{% for th in headers %}
-			<th>
-				<div class="row justify-content-between">
-					<div class="col-auto gy-1">{{ th }}</div>
-					<div class="col-auto">
-						<div class="dropdown">
-							<a class="btn" type="button" id="{{ th }}Sort" href="javascript:sort('{{ th }}')">
-								{% if th in sort_asc %}
-								<i class="bi-arrow-up"></i>
-								{% elif th in sort_desc %}
-								<i class="bi-arrow-down"></i>
-								{% else %}
-								<i class="bi-arrow-down-up"></i>
-								{% endif %}
-							</a>
-						</div>
-					</div>
-				</div>
+			<th class="px-0">
+				<button type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ th | replace(' ', '_') }}Modal">{{ th }}</button>
 			</th>
 			{% endfor %}
 		</tr>
@@ -110,5 +98,33 @@
 		{% endfor %}
 	</tbody>
 </table>
+
+{% for th in headers %}
+<div class="modal fade" id="{{ th | replace(' ', '_') }}Modal" tabindex="-1">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">{{ th }}</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<div class="row justify-content-center">
+					<div class="btn-group">
+						<a href="javascript:sort('{{ th }}', 'asc')" class="btn btn-outline-primary">Sort A-Z</a>
+						<a href="javascript:sort('{{ th }}', 'desc')" class="btn btn-outline-primary">Sort Z-A</a>
+					</div>
+				</div>
+				<hr/>
+				<div class="row">
+					<a href="javascript:hide('{{ th }}')"><i class="bi-eye-slash"></i> Hide column</a>
+				</div>
+			</div>
+			<div class="modal-footer">
+        		<button type="button" class="btn btn-sm btn-primary">Update</button>
+			</div>
+		</div>
+	</div>
+</div>
+{% endfor %}
 
 {% endblock %}

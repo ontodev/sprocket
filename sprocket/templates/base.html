@@ -92,7 +92,7 @@
 		 */
 		// Remove the message from the value of the cell
 		var value = document.getElementById(`value${rowNum}-${cellNum}`);
-		value.innerText = value.innerText.replace(`\n${msg}`, "");
+		value.innerText = value.innerText.replace(msg.replace("<br>", "\n"), "").trim();
 
 		// Add tooltip
 		var td = document.getElementById(`td${rowNum}-${cellNum}`);
@@ -134,6 +134,19 @@
 		btn.innerHTML = '<i class="bi-dash"></i>';
 	}
 
+	function hide(col) {
+		var url = new URL(window.location.href);
+		var curSelectStr = url.searchParams.get("select");
+		if (curSelectStr) {
+			var select = curSelectStr.split(",");
+		} else {
+			select = headers;
+		}
+		select = select.filter(e => e !== col);
+		url.searchParams.set("select", select.join(","));
+		window.location.href = url;
+	}
+
 	function jump(curOffset) {
 		var newOffset = prompt("Jump to row", curOffset);
 		if (newOffset) {
@@ -151,51 +164,24 @@
 		window.location.href = url;
 	}
 
-	function sort(col) {
+	function sort(col, direction) {
 		/**
 		 * Sort query results. The actual sorting is done server-side,
 		 * but this bit of script creates the correct query parameters.
 		 */
-		// Get current parameters
-		var qString = window.location.search;
-		var params = new URLSearchParams(qString);
-		var newParams = [];
+		var url = new URL(window.location.href);
+		var curOrder = url.searchParams.get("order");
 		var newOrder = [];
-		var sortOrder = null;
-		// Add all current params to new params, only add order keys that are not col
-		for (var entry of params.entries()) {
-			if (entry[0] !== "order") {
-				newParams.push(`${entry[0]}=${entry[1]}`);
-			} else {
-				for (var ord of entry[1].split(",")) {
-					if (!ord.startsWith(col + ".") && ord !== col) {
-						newOrder.push(ord);
-					} else if (ord == col) {
-						sortOrder = "asc";
-					} else {
-						sortOrder = ord.split(".")[1];
-					}
+		if (curOrder !== null) {
+			for (var ord of curOrder.split(",")) {
+				if (!ord.startsWith(col + ".") && ord !== col) {
+					newOrder.push(ord);
 				}
 			}
 		}
-
-		if (sortOrder === "asc") {
-			// Currently ascending, sort descending
-			newOrder.push(col + ".desc");
-		} else if (sortOrder == null) {
-			// Not currently sorted, sort ascending
-			newOrder.push(col);
-		}
-
-		// Redirect to new URL
-		if (newOrder.length > 0) {
-			newParams.push("order=" + newOrder.join(","));
-		}
-		if (newParams.length > 0) {
-			window.location.href = "?" + newParams.join("&");
-		} else {
-			window.location.href = window.location.href.split("?")[0];
-		}
+		newOrder.push(`${col}.${direction}`);
+		url.searchParams.set("order", newOrder.join(","));
+		window.location.href = url;
 	}
 
 	function submitQueryForm(headers, hidden) {

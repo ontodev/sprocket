@@ -144,7 +144,7 @@ def render_database_table(
         try:
             order_by = []
             for ob in parse_order_by(order):
-                s = [f"{ob['key']}"]
+                s = [f'"{ob["key"]}"']
                 if ob["order"]:
                     s.append(ob["order"].upper())
                 if ob["nulls"]:
