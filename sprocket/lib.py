@@ -265,13 +265,14 @@ def parse_order_by(order) -> List[dict]:
     return order_by
 
 
-def parse_where(where, column) -> Tuple[str, str]:
+def parse_where(where, column, postgres=False) -> Tuple[str, str]:
     """Create a where clause by parsing the horizontal filtering condition.
     The WHERE is a tuple containing the operator (e.g., LIKE) and the constraint (e.g., "foo", or
     None for some like NULL) so that we can use the constraints in parameterized queries.
 
     :param where:
     :param column:
+    :param postgres: if True, use Postgres syntax which includes ILIKE
     :return: a tuple containing a tuple (where statement, constraint) and an error message
             (None on success)"""
     # Parse using Lark grammar
@@ -294,6 +295,7 @@ def parse_where(where, column) -> Tuple[str, str]:
         raise ValueError("The constraint for 'in' must be a list")
 
     # Set the SQL operator
+    col_name = f'"{column}"'
     if operator == "eq":
         query_op = "="
     elif operator == "gt":
@@ -318,9 +320,18 @@ def parse_where(where, column) -> Tuple[str, str]:
             constraint = None
         else:
             query_op = "IS"
+    elif operator == "like":
+        query_op = "LIKE"
+        constraint = f"%%{constraint}%%"
+    elif operator == "ilike":
+        query_op = "ILIKE"
+        constraint = f"%%{constraint}%%"
+        if not postgres:
+            query_op = "LIKE"
+            col_name = f'lower("{column}")'
     else:
         query_op = operator.upper()
-    return statement + f'"{column}" {query_op}', constraint
+    return statement + f'{col_name} {query_op}', constraint
 
 
 class SprocketError(RuntimeError):

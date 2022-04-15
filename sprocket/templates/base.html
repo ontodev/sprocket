@@ -36,15 +36,23 @@
 		.long-word {
 		  word-break: break-all;
 		}
-
 		.bg-debug {
 		  background-color: #abc4ff !important;
+		}
+		a.bg-debug:hover {
+		  background-color: #4d82ff !important;
 		}
 		.bg-error {
 		  background-color: #ffabab !important;
 		}
+		a.bg-error:hover {
+		  background-color: #ff4d4d !important;
+		}
 		.bg-info {
 		  background-color: #fff8ab !important;
+		}
+		a.bg-info:hover {
+		  background-color: #fff04d !important;
 		}
 		.bg-null {
 		  color: #cfcfcf;
@@ -54,6 +62,9 @@
 		}
 		.bg-warn {
 		  background-color: #ffcdab !important;
+		}
+		a.bg-warn:hover {
+		  background-color: #ff944d !important;
 		}
 		.tooltip-inner {
 		  white-space: pre-wrap;
@@ -151,7 +162,7 @@
 		var newOffset = prompt("Jump to row", curOffset);
 		if (newOffset) {
 			var url = new URL(window.location.href);
-			url.searchParams.set("offset", newOffset);
+			url.searchParams.set("offset", parseInt(newOffset) - 1);
 			window.location.href = url;
 		}
 	}
@@ -192,6 +203,35 @@
 			url.searchParams.set(col, operator + "." + encodeURIComponent(constraint));
 			window.location.href = url;
 		}
+	}
+
+	function updateLoc() {
+		var offset = document.getElementById("offsetValue").value;
+		var limit = document.getElementById("limitValue").value;
+		var url = new URL(window.location.href);
+		if (offset) {
+			url.searchParams.set("offset", offset - 1);
+		}
+		if (limit) {
+			url.searchParams.set("limit", limit);
+		}
+		window.location.href = url;
+	}
+
+	function violations(level) {
+		var url = new URL(window.location.href);
+		var curViolations = url.searchParams.get("violations");
+		if (curViolations !== null) {
+			curViolations = curViolations.split(",");
+			if (curViolations.includes(level)) {
+				return;
+			}
+			curViolations.push(level);
+			url.searchParams.set("violations", curViolations.join(","));
+		} else {
+			url.searchParams.set("violations", level);
+		}
+		window.location.href = url;
 	}
 
 	function submitQueryForm(headers, hidden) {

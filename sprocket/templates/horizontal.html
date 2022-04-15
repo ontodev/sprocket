@@ -5,6 +5,14 @@
 	<div class="col-auto">
 		<a class="btn btn-outline-primary" href="javascript:reset()">Reset</a>
 	</div>
+	<div class="col-auto">
+		<div class="btn-group">
+			<a href="javascript:violations('error')" class="btn btn-outline-primary bg-error">Error</a>
+			<a href="javascript:violations('warn')" class="btn btn-outline-primary bg-warn">Warning</a>
+			<a href="javascript:violations('info')" class="btn btn-outline-primary bg-info">Info</a>
+			<a href="javascript:violations('debug')" class="btn btn-outline-primary bg-debug">Debug</a>
+		</div>
+	</div>
 	<!-- Pagniation -->
 	<div class="col-auto px-0">
 		{% if rows %}
@@ -20,11 +28,14 @@
 				<a href="#" class="btn btn-outline-secondary disabled">first</a>
 				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
 			{% endif %}
-			{% if (limit + offset) > len %}
-				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ len }} of {{ total }}</a>
-			{% else %}
-				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ limit + offset }} of {{ total }}</a>
-			{% endif %}
+
+			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
+				{% if (limit + offset) > len %}
+				{{ offset + 1 }}-{{ len }} of {{ total }}
+				{% else %}
+				{{ offset + 1 }}-{{ limit + offset }} of {{ total }}
+				{% endif %}
+			</button>
 			{% if urls["next"] %}
 				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
 				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>

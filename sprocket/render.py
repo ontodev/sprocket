@@ -42,6 +42,7 @@ def render_database_table(
     conn,
     table,
     request_args,
+    base_url=None,
     default_limit=100,
     display_messages=None,
     hide_meta=True,
@@ -50,7 +51,6 @@ def render_database_table(
     javascript=True,
     primary_key=None,
     show_help=False,
-    show_options=True,
     standalone=True,
     use_view=True,
 ):
@@ -72,8 +72,6 @@ def render_database_table(
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
-    :param show_options: if True, show the accordion menu at the top of the page with the query
-                         parameter options.
     :param standalone: if True, include HTML headers & script in HTML output.
     :param use_view: if True, attempt to retrieve results from a '*_view' table which combines the
                       table and its conflict table."""
@@ -133,7 +131,7 @@ def render_database_table(
         if not where:
             continue
         try:
-            stmt = parse_where(where, tc)
+            stmt = parse_where(where, tc, postgres=str(conn.engine.url).startswith("postgres"))
         except ValueError as e:
             return SprocketError(e)
         where_statements.append(stmt)
@@ -200,6 +198,7 @@ def render_database_table(
             results,
             table,
             request_args,
+            base_url=base_url,
             columns=select_cols,
             default_limit=default_limit,
             descriptions=descriptions,
@@ -207,7 +206,6 @@ def render_database_table(
             ignore_params=ignore_params,
             javascript=javascript,
             primary_key=primary_key,
-            show_options=show_options,
             standalone=standalone,
         )
     headers = results[0].keys()
@@ -233,13 +231,11 @@ def render_html_table(
     default_limit=100,
     descriptions=None,
     display_messages=None,
-    hidden=None,
     hide_meta=True,
     ignore_params=None,
     include_expand=True,
     javascript=True,
     primary_key=None,
-    show_options=True,
     standalone=True,
     total=None,
 ):
@@ -256,14 +252,11 @@ def render_html_table(
     :param default_limit:
     :param descriptions:
     :param display_messages:
-    :param hidden:
     :param hide_meta:
     :param ignore_params: list of query parameters to exclude from URLs
     :param include_expand:
     :param primary_key: The column name to use as the primary key for the table. This value will be
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
-    :param show_options: if True, show the accordion menu at the top of the page with the query
-                         parameter options.
     :param standalone:
     :param total:
     :return:
@@ -413,11 +406,6 @@ def render_html_table(
         base_url, request_args, total, ignore_params=ignore_params, offset=offset, limit=limit
     )
 
-    hidden_args = {}
-    if hidden:
-        for h in hidden:
-            hidden_args[h] = request_args.get(h)
-
     # Get the columns we're sorting by and put into appropriate list so we know which btn to show
     order = request_args.get("order")
     sort_asc = []
@@ -431,7 +419,6 @@ def render_html_table(
 
     render_args = {
         "headers": headers,
-        "hidden": hidden_args,
         "include_expand": include_expand,
         "javascript": javascript,
         "limit": limit,
@@ -439,7 +426,6 @@ def render_html_table(
         "offset": offset,
         "options": options,
         "select": columns,
-        "show_options": show_options,
         "sort_asc": sort_asc,
         "sort_desc": sort_desc,
         "standalone": standalone,

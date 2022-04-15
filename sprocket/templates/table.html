@@ -1,141 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if show_options %}
-<div class="row" style="padding:10px;">
-	<div class="accordion" id="accordionOptions">
-		<div class="accordion-item">
-			<h2 class="accordion-header">
-				<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOptions">
-					<strong>Query Options</strong>
-				</button>
-			</h2>
-			<div id="collapseOptions" class="accordion-collapse collapse" data-bs-parent="#accordionOptions">
-				<div class="accordion-body">
-					<form method="get">
-						<div class="row g-3">
-							<div class="col-md-7" style="padding-right:30px;">
-								<p class="lead">Filter results</p>
-								{% for h, details in headers.items() %}
-								{% if h != "rowid" %}
-								<div class="row">
-									<div class="col-sm-4 col-form-label">
-										<label>{{ h }}</label>
-									</div>
-									<div class="col-sm-3">
-										<select class="form-select" id="{{ h }}Operator" name="operator">
-											{% if not details.has_selected %}
-											<option selected></option>
-											{% endif %}
-											{% for val, optdetails in details.options.items() %}
-												{% if optdetails.selected %}
-												<option value="{{ val }}" selected>{{ optdetails.label }}</option>
-												{% else %}
-												<option value="{{ val }}">{{ optdetails.label }}</option>
-												{% endif %}
-											{% endfor %}
-										</select>
-									</div>
-									<div class="col-sm-5">
-										{% if details.const %}
-										<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text" value="{{ details.const }}">
-										{% else %}
-										<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text">
-										{% endif %}
-									</div>
-								</div>
-								{% endif %}
-								{% endfor %}
-							</div>
-							<div class="col-md-3">
-								<p class="lead">Show columns</p>
-								<div class="row">
-									{% for s in select %}
-									<div class="form-check">
-										{% if s in headers %}
-										<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}" checked>
-										{% else %}
-										<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}">
-										{% endif %}
-										<label class="form-check-label" for="{{ s }}">{{ s }}</label>
-									</div>
-									{% endfor %}
-								</div>
-								<input type="hidden" id="select" name="select" value="">
-							</div>
-							<div class="col-md-2">
-								<div class="row">
-									<p class="lead">Filter violations</p>
-									<div class="row">
-										<div class="col-md-6">
-											<div class="form-check">
-												{% if "debug" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug">
-												{% endif %}
-												<label class="form-check-label" for="debug">debug</label>
-											</div>
-											<div class="form-check">
-												{% if "warn" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn">
-												{% endif %}
-												<label class="form-check-label" for="warn">warn</label>
-											</div>
-										</div>
-										<div class="col-md-6">
-											<div class="form-check">
-												{% if "info" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info">
-												{% endif %}
-												<label class="form-check-label" for="info">info</label>
-											</div>
-											<div class="form-check">
-												{% if "error" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error">
-												{% endif %}
-												<label class="form-check-label" for="error">error</label>
-											</div>
-										</div>
-									</div>
-								</div>
-								<div class="row" style="padding-top: 20px;">
-									<div class="col-auto">
-										<label for="limitValue" class="col-form-label">Results per page</label>
-									</div>
-									<div class="col-auto">
-										<select class="form-select" id="limitValue" name="limit">
-											{{ options|safe }}
-										</select>
-									</div>
-								</div>
-								{% for k, v in hidden.items() %}
-								<input id="{{ k }}" value="{{ v }}" hidden/>
-								{% endfor %}
-								<div class="row" style="padding-top:20px;">
-									<div class="col-auto">
-										<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
-									</div>
-									<div class="col-auto">
-										<input type="button" onclick="submitQueryForm({{ headers.keys() | list }}, {{ hidden.keys() | list }});" class="btn btn-primary" value="Update">
-									</div>
-								</div>
-							</div>
-						</div>
-					</form>
-				</div>
-			</div>
-		</div>
-	</div>
-</div>
-{% endif %}
-
 {% block subcontent %}
 {% endblock %}
 
@@ -163,11 +28,14 @@
 				<a href="#" class="btn btn-outline-secondary disabled">first</a>
 				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
 			{% endif %}
-			{% if (limit + offset) > len %}
-				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ len }} of {{ total }}</a>
-			{% else %}
-				<a href="javascript:jump()" class="btn btn-outline-primary">{{ offset + 1 }}-{{ limit + offset }} of {{ total }}</a>
-			{% endif %}
+
+			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
+				{% if (limit + offset) > len %}
+				{{ offset + 1 }}-{{ len }} of {{ total }}
+				{% else %}
+				{{ offset + 1 }}-{{ limit + offset }} of {{ total }}
+				{% endif %}
+			</button>
 			{% if urls["next"] %}
 				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
 				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
@@ -175,6 +43,38 @@
 				<a href="#" class="btn btn-outline-secondary disabled">next</a>
 				<a href="#" class="btn btn-outline-secondary disabled">last</a>
 			{% endif %}
+		</div>
+	</div>
+</div>
+
+<div class="modal fade" id="updateLoc" tabindex="-1">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">Show Results</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<div class="row py-2">
+					<div class="col-md-4">
+						<label class="col-form-label">Results per page</label>
+					</div>
+					<div class="col-auto">
+						<input type="number" id="limitValue" class="form-control" value="{{ limit }}">
+					</div>
+				</div>
+				<div class="row py-2">
+					<div class="col-md-4">
+						<label class="col-form-label">Jump to row</label>
+					</div>
+					<div class="col-auto">
+						<input type="number" class="form-control" id="offsetValue" value="{{ offset + 1 }}">
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+        		<a type="button" class="btn btn-sm btn-primary" href="javascript:updateLoc()">Update</a>
+			</div>
 		</div>
 	</div>
 </div>
