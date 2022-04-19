@@ -59,6 +59,8 @@ def render_database_table(
     :param conn: database connection
     :param table: table name
     :param request_args:
+    :param base_url: The base URL for this page without query parameters. By default, this is the
+                     table name. It is used to construct navigation & export links.
     :param default_limit: The max number of results to show per page, unless 'limit' is provided in
                         the query parameters.
     :param display_messages: dictionary containing messages to display as dismissible banners. The
@@ -68,6 +70,7 @@ def render_database_table(
                       the cell value and (maybe) error message of the matching column.
     :param ignore_cols: list of columns of the SQL table to exclude from query/results.
     :param ignore_params: list of query parameters to exclude from URL.
+    :param javascript: if True, include sprocket javascript in the HTML output.
     :param primary_key: The column name to use as the primary key for the table. This value will be
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
     :param show_help: if True, show descriptions for columns in single-row view.
@@ -171,26 +174,18 @@ def render_database_table(
         query_cols = deepcopy(select_cols)
     if "row_number" in table_cols:
         query_cols.insert(0, "row_number")
+    tname = table
     if use_view:
-        results = exec_query(
-            conn,
-            table + "_view",
-            columns=table_cols,
-            select=query_cols,
-            where_statements=where_statements,
-            order_by=order_by,
-            violations=violations,
-        )
-    if not results:
-        results = exec_query(
-            conn,
-            table,
-            columns=table_cols,
-            select=query_cols,
-            where_statements=where_statements,
-            order_by=order_by,
-            violations=violations,
-        )
+        tname += "_view"
+    results = exec_query(
+        conn,
+        tname,
+        columns=table_cols,
+        select=query_cols,
+        where_statements=where_statements,
+        order_by=order_by,
+        violations=violations,
+    )
 
     # Return results based on format
     if fmt == "html":
@@ -236,6 +231,7 @@ def render_html_table(
     include_expand=True,
     javascript=True,
     primary_key=None,
+    show_filters=True,
     standalone=True,
     total=None,
 ):
@@ -244,7 +240,8 @@ def render_html_table(
     :param data:
     :param table:
     :param request_args:
-    :param base_url:
+    :param base_url: The base URL for this page without query parameters. By default, this is the
+                     table name. It is used to construct navigation & export links.
     :param columns: Optional list of column names to display as headers of the HTML table.
                     If not provided, the keys of the first element of data are used as headers.
     :param conflict_prefix: Prefix to use for row_number when primary_key is provided and there is a
@@ -255,8 +252,10 @@ def render_html_table(
     :param hide_meta:
     :param ignore_params: list of query parameters to exclude from URLs
     :param include_expand:
+    :param javascript: if True, include sprocket javascript in the HTML output.
     :param primary_key: The column name to use as the primary key for the table. This value will be
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
+    :param show_filters: if True, show "filter by condition" options in header modals.
     :param standalone:
     :param total:
     :return:
@@ -286,7 +285,7 @@ def render_html_table(
 
     if hide_meta:
         # exclude *_meta columns from display and use the values to render cell styles
-        meta_names = [x for x in header_names if x.endswith("_meta")]
+        meta_names = [x for x in results[0].keys() if x.endswith("_meta")]
         header_names = [x for x in header_names if x not in meta_names]
         # also update columns for selections
         if columns:
@@ -426,6 +425,7 @@ def render_html_table(
         "offset": offset,
         "options": options,
         "select": columns,
+        "show_filters": show_filters,
         "sort_asc": sort_asc,
         "sort_desc": sort_desc,
         "standalone": standalone,

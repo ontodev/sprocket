@@ -205,7 +205,7 @@ def get_urls(
         first_query = [f"{k}={v}" for k, v in prev_args.items() if k not in ignore_params]
         first_url = base_url
         if first_query:
-            first_url += "?" + "&".join(prev_query)
+            first_url += "?" + "&".join(first_query)
     if limit + offset < total_results:
         # Only include "next" and "last" link if we aren't at the end
         next_args = request_args.copy()

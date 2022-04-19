@@ -13,15 +13,12 @@
 			<a href="javascript:violations('debug')" class="btn btn-outline-primary bg-debug">Debug</a>
 		</div>
 	</div>
-	<!-- Pagniation -->
+	<!-- Pagination -->
 	<div class="col-auto px-0">
-		{% if rows %}
-			{% set len = (rows|length + offset) %}
-		{% else %}
-			{% set len = offset + 1 %}
-		{% endif %}
 		<div class="btn-group">
-			{% if urls["prev"] %}
+			{# rows are always defined for horizontal view, check that len is not 0 #}
+			{% set has_results = rows|length > 0 %}
+			{% if has_results and urls["prev"] %}
 				<a href="{{ urls['first'] }}" class="btn btn-outline-primary">first</a>
 				<a href="{{ urls['prev'] }}" class="btn btn-outline-primary">prev</a>
 			{% else %}
@@ -29,14 +26,21 @@
 				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
 			{% endif %}
 
+			{% if not has_results %}
+			<!-- No results, disable button to change loc (nowhere to go) -->
+			<button type="button" class="btn btn-outline-secondary disabled">0 of 0</button>
+			{% else %}
 			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
-				{% if (limit + offset) > len %}
-				{{ offset + 1 }}-{{ len }} of {{ total }}
+				{% if limit == 1 %}
+				{{ offset + 1 }} of {{ total }}
 				{% else %}
-				{{ offset + 1 }}-{{ limit + offset }} of {{ total }}
+				<!-- length of rows (what is shown, may be less than limit) plus offset is the loc of last row -->
+				{{ offset + 1 }}-{{ rows|length + offset }} of {{ total }}
 				{% endif %}
 			</button>
-			{% if urls["next"] %}
+			{% endif %}
+
+			{% if has_results and urls["next"] %}
 				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
 				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
 			{% else %}
@@ -53,7 +57,7 @@
 			{% if include_expand %} <th/> {% endif %}
 			{% for th in headers %}
 			<th class="px-0">
-				<button type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ th | replace(' ', '_') }}Modal">{{ th }}</button>
+				<button type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ th | replace(' ', '_') | replace(':', '_') }}Modal">{{ th }}</button>
 			</th>
 			{% endfor %}
 		</tr>
@@ -79,7 +83,7 @@
 			{% set cell = row["cells"][th] %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 			{% if cell %}
-				{% if cell["value"]|length > 100 and " " not in cell["value"] %}
+				{% if cell["value"]|length > 100 and " " not in cell["value"].strip() %}
 					{% set extra_class = " long-word" %}
 				{% else %}
 					{% set extra_class = "" %}
@@ -111,7 +115,7 @@
 </table>
 
 {% for th in headers %}
-<div class="modal fade" id="{{ th | replace(' ', '_') }}Modal" tabindex="-1">
+<div class="modal fade" id="{{ th | replace(' ', '_') | replace(':', '_') }}Modal" tabindex="-1">
 	<div class="modal-dialog">
 		<div class="modal-content">
 			<div class="modal-header">
@@ -130,11 +134,12 @@
 					<a href="javascript:hide('{{ th }}')"><i class="bi-eye-slash"></i> Hide column</a>
 				</div>
 				<hr/>
+				{% if show_filters %}
 				<div class="row"><div class="col-auto pb-2">Filter by condition</div></div>
 				<div class="row">
 					{% set details = headers[th] %}
 					<div class="col-md-5">
-						<select class="form-select" id="{{ th | replace(' ', '_') }}Operator" name="operator">
+						<select class="form-select" id="{{ th | replace(' ', '_') | replace(':', '_') }}Operator" name="operator">
 							{% if not details.has_selected %}
 							<option selected></option>
 							{% endif %}
@@ -149,12 +154,13 @@
 					</div>
 					<div class="col-md-7">
 						{% if details.const %}
-						<input class="form-control" id="{{ th | replace(' ', '_') }}Constraint" name="constraint" type="text" value="{{ details.const }}">
+						<input class="form-control" id="{{ th | replace(' ', '_') | replace(':', '_') }}Constraint" name="constraint" type="text" value="{{ details.const }}">
 						{% else %}
-						<input class="form-control" id="{{ th | replace(' ', '_') }}Constraint" name="constraint" type="text">
+						<input class="form-control" id="{{ th | replace(' ', '_') | replace(':', '_') }}Constraint" name="constraint" type="text">
 						{% endif %}
 					</div>
 				</div>
+				{% endif %}
 			</div>
 			<div class="modal-footer">
         		<a type="button" class="btn btn-sm btn-primary" href="javascript:submitForm('{{ th }}')">Update</a>

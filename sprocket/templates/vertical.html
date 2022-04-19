@@ -15,7 +15,7 @@
                 </div>
             </div>
         </div>
-        {% if cell["value"]|length > 100 and " " not in cell["value"] %}
+        {% if cell["value"]|length > 100 and " " not in cell["value"].strip() %}
             {% set extra_class = " long-word" %}
         {% else %}
             {% set extra_class = "" %}

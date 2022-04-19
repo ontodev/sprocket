@@ -197,8 +197,8 @@
 
 	function submitForm(col) {
 		var url = new URL(window.location.href);
-		var operator = document.getElementById(`${col.replace(" ", "_")}Operator`).value;
-		var constraint = document.getElementById(`${col.replace(" ", "_")}Constraint`).value;
+		var operator = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Operator`).value;
+		var constraint = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Constraint`).value;
 		if (operator && constraint) {
 			url.searchParams.set(col, operator + "." + encodeURIComponent(constraint));
 			window.location.href = url;
@@ -208,7 +208,9 @@
 	function updateLoc() {
 		var offset = document.getElementById("offsetValue").value;
 		var limit = document.getElementById("limitValue").value;
-		var url = new URL(window.location.href);
+		var url = new URL("{{ urls['this'] }}", document.baseURI);
+
+		// Set new location and redirect
 		if (offset) {
 			url.searchParams.set("offset", offset - 1);
 		}

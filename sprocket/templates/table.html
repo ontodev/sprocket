@@ -13,15 +13,15 @@
 		{% endif %}
 		<p>Download results: <a href="{{ this_url }}format=tsv">tsv</a> | <a href="{{ this_url }}format=csv">csv</a></p>
 	</div>
-	<!-- Pagniation -->
+	<!-- Pagination -->
 	<div class="col-auto px-0">
-		{% if rows %}
-			{% set len = (rows|length + offset) %}
-		{% else %}
-			{% set len = offset + 1 %}
-		{% endif %}
 		<div class="btn-group">
-			{% if urls["prev"] %}
+			{# if there are no rows, this is a single-item page, otherwise check row length #}
+			{% set has_results = True %}
+			{% if rows is defined %}
+				{% set has_results = rows|length > 0 %}
+			{% endif %}
+			{% if has_results and urls["prev"] %}
 				<a href="{{ urls['first'] }}" class="btn btn-outline-primary">first</a>
 				<a href="{{ urls['prev'] }}" class="btn btn-outline-primary">prev</a>
 			{% else %}
@@ -29,14 +29,27 @@
 				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
 			{% endif %}
 
-			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
-				{% if (limit + offset) > len %}
-				{{ offset + 1 }}-{{ len }} of {{ total }}
+			{% if not has_results or total == 1 %}
+			{# No results, disable button to change loc (nowhere to go) #}
+			<button type="button" class="btn btn-outline-secondary disabled">
+				{% if not has_results %}
+				0 of 0
 				{% else %}
-				{{ offset + 1 }}-{{ limit + offset }} of {{ total }}
+				1 of 1
 				{% endif %}
 			</button>
-			{% if urls["next"] %}
+			{% else %}
+			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
+				{% if rows is not defined or limit == 1 %}
+				{{ offset + 1 }} of {{ total }}
+				{% else %}
+				{# length of rows (what is shown, may be less than limit) plus offset is the loc of last row #}
+				{{ offset + 1 }}-{{ rows|length + offset }} of {{ total }}
+				{% endif %}
+			</button>
+			{% endif %}
+
+			{% if has_results and urls["next"] %}
 				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
 				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
 			{% else %}
