@@ -103,14 +103,29 @@
 		 */
 		// Remove the message from the value of the cell
 		var value = document.getElementById(`value${rowNum}-${cellNum}`);
-		value.innerText = value.innerText.replace(msg.replace("<br>", "\n"), "").trim();
+		for (var n of value.childNodes) {
+			try {
+				if (n.getAttribute("class") === "fst-italic") {
+					value.removeChild(n);
+					break;
+				}
+			} catch (e) {
+				// no function getAttribute for strings
+				continue;
+			}
+		}
+
+		var tooltipMsg = msg;
+		if (msg.length > 105) {
+			var tooltipMsg = msg.substring(0, 80) + "<br><i>... and more</i>";
+		}
 
 		// Add tooltip
 		var td = document.getElementById(`td${rowNum}-${cellNum}`);
 		td.setAttribute("data-bs-toggle", "tooltip");
 		td.setAttribute("data-bs-placement", "bottom");
-		td.setAttribute("data-bs-original-title", msg);
-		td.setAttribute("title", msg);
+		td.setAttribute("data-bs-original-title", tooltipMsg);
+		td.setAttribute("title", tooltipMsg);
 
 		// Update btn
 		var btn = document.getElementById(`expand${rowNum}-${cellNum}`);
