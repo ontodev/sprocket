@@ -3,6 +3,7 @@ import os
 import requests
 
 from collections import defaultdict
+from lark.exceptions import UnexpectedInput
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import bindparam
 from sqlalchemy.sql.expression import text as sql_text
@@ -276,7 +277,10 @@ def parse_where(where, column, postgres=False) -> Tuple[str, str]:
     :return: a tuple containing a tuple (where statement, constraint) and an error message
             (None on success)"""
     # Parse using Lark grammar
-    parsed = PARSER.parse(where)
+    try:
+        parsed = PARSER.parse(where)
+    except UnexpectedInput:
+        raise ValueError(f"Invalid filter constraint for column '{column}': {where}")
     res = SprocketTransformer().transform(parsed)
     if len(res) == 3:
         # NOT operator included
@@ -322,10 +326,16 @@ def parse_where(where, column, postgres=False) -> Tuple[str, str]:
             query_op = "IS"
     elif operator == "like":
         query_op = "LIKE"
-        constraint = f"%%{constraint}%%"
+        if "%" not in constraint:
+            constraint = f"%%{constraint}%%"
+        else:
+            constraint = constraint.replace("%", "%%")
     elif operator == "ilike":
         query_op = "ILIKE"
-        constraint = f"%%{constraint}%%"
+        if "%" not in constraint:
+            constraint = f"%%{constraint}%%"
+        else:
+            constraint = constraint.replace("%", "%%")
         if not postgres:
             query_op = "LIKE"
             col_name = f'lower("{column}")'

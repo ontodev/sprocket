@@ -97,6 +97,54 @@
 	headers.push('{{ h }}');
 	{% endfor %}
 
+	function addIcons() {
+		var url = new URL(window.location.href);
+		for (var h of headers) {
+			var filter = url.searchParams.get(h);
+			if (!filter) {
+				continue;
+			}
+			var ele = document.getElementById(h.replace(" ", "_").replace(":", "_"));
+			if (!ele) {
+				console.log("missing " + h);
+				continue;
+			}
+			var icon = document.createElement("i");
+			icon.setAttribute("class", "bi-funnel ps-1");
+			icon.setAttribute("style", "color: gray");
+			ele.appendChild(icon);
+		}
+		var order = url.searchParams.get("order");
+		if (order) {
+			for (var o of order.split(",")) {
+				var asc = true;
+				if (o.endsWith(".asc")) {
+					o = o.slice(0, -4);
+				} else if (o.endsWith(".desc")) {
+					asc = false;
+					o = o.slice(0, -5);
+				}
+				var ele = document.getElementById(o.replace(" ", "_").replace(":", "_"));
+				if (!ele) {
+					continue;
+				}
+				var icon = document.createElement("i");
+				var classes = [];
+				if (asc) {
+					classes.push("bi-sort-up");
+				} else {
+					classes.push("bi-sort-down");
+				}
+				if (!url.searchParams.get(o)) {
+					classes.push("ps-1");
+				}
+				icon.setAttribute("class", classes.join(" "));
+				icon.setAttribute("style", "color: gray");
+				ele.appendChild(icon);
+			}
+		}
+	}
+
 	function collapse(level, msg, rowNum, cellNum) {
 		/**
 		 * Collapse violation messages for a cell at given location.
@@ -215,6 +263,10 @@
 		var operator = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Operator`).value;
 		var constraint = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Constraint`).value;
 		if (operator && constraint) {
+			if ((operator == "in" || operator == "not.in") && !constraint.startsWith("(")) {
+				// Wrap constraint in parens for a list
+				constraint = `(${constraint})`
+			}
 			url.searchParams.set(col, operator + "." + encodeURIComponent(constraint));
 			window.location.href = url;
 		}
@@ -333,6 +385,35 @@
 	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
 	  return new bootstrap.Tooltip(tooltipTriggerEl)
 	})
+
+	addIcons();
+
+	// Display hints for filters
+	$(function() {
+		$('select[name="operator"]').on('change', function(event) {
+			var ele = document.getElementById("filterHint");
+			if (ele) {
+				ele.remove();
+			}
+			if (["eq", "neq", "in", "not.in", "like", "ilike"].includes(this.value)) {
+				var th = this.id.slice(0, -8);
+				var modalBody = document.getElementById(th + "Options");
+				var ele = document.createElement("row");
+				ele.setAttribute("id", "filterHint");
+				var txt = document.createElement("p");
+				txt.setAttribute("class", "form-text ps-1");
+				if (this.value == "in" || this.value == "not.in") {
+					txt.innerText = "condition must be a comma-separated list (no spaces)";
+				} else if (this.value == "like" || this.value == "ilike") {
+					txt.innerText = "use '%' to represent zero or more characters to match, otherwise the condition will be treated as a substring";
+				} else {
+					txt.innerText = "equals is used for literal comparison; to match NULL, use 'is' or 'is not'";
+				}
+				ele.appendChild(txt);
+				modalBody.appendChild(ele);
+			}
+		});
+	});
 </script>
 {% endif %}
 {% if standalone %}

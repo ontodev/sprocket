@@ -56,8 +56,9 @@
 		<tr>
 			{% if include_expand %} <th/> {% endif %}
 			{% for th in headers %}
+			{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
 			<th class="px-0">
-				<button type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ th | replace(' ', '_') | replace(':', '_') }}Modal">{{ th }}</button>
+				<button id="{{ safe_header }}" type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ safe_header }}Modal">{{ th }}</button>
 			</th>
 			{% endfor %}
 		</tr>
@@ -120,14 +121,15 @@
 </table>
 
 {% for th in headers %}
-<div class="modal fade" id="{{ th | replace(' ', '_') | replace(':', '_') }}Modal" tabindex="-1">
+{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
+<div class="modal fade" id="{{ safe_header }}Modal" tabindex="-1">
 	<div class="modal-dialog">
 		<div class="modal-content">
 			<div class="modal-header">
 				<h5 class="modal-title">{{ th }}</h5>
 				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
 			</div>
-			<div class="modal-body">
+			<div class="modal-body" id="{{ safe_header }}Options">
 				<div class="row justify-content-center">
 					<div class="btn-group">
 						<a href="javascript:sort('{{ th }}', 'asc')" class="btn btn-outline-primary">Sort A-Z</a>
@@ -141,10 +143,10 @@
 				<hr/>
 				{% if show_filters %}
 				<div class="row"><div class="col-auto pb-2">Filter by condition</div></div>
-				<div class="row">
+				<div class="row"=>
 					{% set details = headers[th] %}
 					<div class="col-md-5">
-						<select class="form-select" id="{{ th | replace(' ', '_') | replace(':', '_') }}Operator" name="operator">
+						<select class="form-select" id="{{ safe_header }}Operator" name="operator">
 							{% if not details.has_selected %}
 							<option selected></option>
 							{% endif %}
@@ -159,9 +161,9 @@
 					</div>
 					<div class="col-md-7">
 						{% if details.const %}
-						<input class="form-control" id="{{ th | replace(' ', '_') | replace(':', '_') }}Constraint" name="constraint" type="text" value="{{ details.const }}">
+						<input class="form-control" id="{{ safe_header }}Constraint" name="constraint" type="text" value="{{ details.const }}">
 						{% else %}
-						<input class="form-control" id="{{ th | replace(' ', '_') | replace(':', '_') }}Constraint" name="constraint" type="text">
+						<input class="form-control" id="{{ safe_header }}Constraint" name="constraint" type="text">
 						{% endif %}
 					</div>
 				</div>

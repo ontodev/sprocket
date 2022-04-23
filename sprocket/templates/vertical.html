@@ -21,7 +21,7 @@
             {% set extra_class = "" %}
         {% endif %}
         {% if cell["style"] and cell["message"] %}
-        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message'] }}">{{ cell["value"]|safe }}</div>
+        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message']|safe }}">{{ cell["value"]|safe }}</div>
         {% elif cell["style"] %}
         <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["value"]|safe }}</div>
         {% else %}

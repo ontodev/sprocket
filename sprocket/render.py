@@ -8,6 +8,7 @@ from flask import render_template, Response
 from io import StringIO
 from jinja2 import Environment, PackageLoader
 from sqlalchemy.sql.expression import text as sql_text
+from urllib.parse import unquote
 from .lib import (
     exec_query,
     get_sql_columns,
@@ -52,6 +53,7 @@ def render_database_table(
     primary_key=None,
     show_help=False,
     standalone=True,
+    transform=None,
     use_view=True,
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
@@ -133,6 +135,7 @@ def render_database_table(
         where = request_args.get(tc)
         if not where:
             continue
+        where = unquote(where)
         try:
             stmt = parse_where(where, tc, postgres=str(conn.engine.url).startswith("postgres"))
         except ValueError as e:
@@ -202,6 +205,7 @@ def render_database_table(
             javascript=javascript,
             primary_key=primary_key,
             standalone=standalone,
+            transform=transform,
         )
     headers = results[0].keys()
     output = StringIO()
@@ -234,6 +238,7 @@ def render_html_table(
     show_filters=True,
     standalone=True,
     total=None,
+    transform=None,
 ):
     """Render the results as an HTML table.
 
@@ -280,10 +285,12 @@ def render_html_table(
             if not v:
                 v = ""
                 style = "null"
+            if transform and k in transform:
+                v = transform[k].format(**{k: v})
             values[k] = {"value": str(v), "style": style, "message": None, "header": k}
         results.append(values)
 
-    if hide_meta:
+    if hide_meta and results:
         # exclude *_meta columns from display and use the values to render cell styles
         meta_names = [x for x in results[0].keys() if x.endswith("_meta")]
         header_names = [x for x in header_names if x not in meta_names]
@@ -356,6 +363,8 @@ def render_html_table(
                 res[value_col]["message"] = "<br>".join(messages).replace('"', "&quot;")
             res_updated.append(res)
         results = res_updated
+    elif hide_meta:
+        header_names = [x for x in header_names if not x.endswith("_meta")]
 
     offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", default_limit))
