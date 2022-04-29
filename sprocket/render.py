@@ -60,7 +60,7 @@ def render_database_table(
     containing TSV/CSV. Utilizes Flask request_args to construct the query to return results.
     :param conn: database connection
     :param table: table name
-    :param request_args:
+    :param request_args: dict of HTTP request args (Flask request.args)
     :param base_url: The base URL for this page without query parameters. By default, this is the
                      table name. It is used to construct navigation & export links.
     :param default_limit: The max number of results to show per page, unless 'limit' is provided in
@@ -78,6 +78,10 @@ def render_database_table(
     :param show_help: if True, show descriptions for columns in single-row view.
                       This requires the 'column' table in the database.
     :param standalone: if True, include HTML headers & script in HTML output.
+    :param transform: dict of column name -> "transform" function (as a string that is evaluated)
+                      to apply to all cells in the column. Only builtin python methods should be
+                      used in the function. Literal strings should be encased in quotes within the
+                      string to ensure `eval` does not throw a SyntaxError.
     :param use_view: if True, attempt to retrieve results from a '*_view' table which combines the
                       table and its conflict table."""
     tables = get_sql_tables(conn)
@@ -168,7 +172,6 @@ def render_database_table(
                 )
 
     # Build & execute the query
-    results = None
     if primary_key and fmt == "html" and primary_key not in select_cols:
         # We always need the primary key, even if it's hidden from select query param
         query_cols = deepcopy(select_cols)
@@ -216,7 +219,7 @@ def render_database_table(
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results)[offset: limit + offset])
+    writer.writerows(list(results)[offset : limit + offset])
     return Response(output.getvalue(), mimetype=mt)
 
 
@@ -240,29 +243,40 @@ def render_html_table(
     total=None,
     transform=None,
 ):
-    """Render the results as an HTML table.
+    """Render the data as an HTML table.
 
-    :param data:
-    :param table:
-    :param request_args:
+    :param data: SQL query results as list of dicts
+    :param table: name of table to render as HTML
+    :param request_args: dict of HTTP request args (Flask request.args)
     :param base_url: The base URL for this page without query parameters. By default, this is the
                      table name. It is used to construct navigation & export links.
     :param columns: Optional list of column names to display as headers of the HTML table.
                     If not provided, the keys of the first element of data are used as headers.
     :param conflict_prefix: Prefix to use for row_number when primary_key is provided and there is a
                             primary_key conflict, e.g. row/32.
-    :param default_limit:
-    :param descriptions:
-    :param display_messages:
-    :param hide_meta:
+    :param default_limit: the max number of rows to display on a single page, by default. This is
+                          overriden by the `limit` param in `request_args`.
+    :param descriptions: dict of column name to description to display tooltips in single-row view.
+    :param display_messages: dict containing messages to display as dismissible banners. The dict
+                             can have the following keys: success, error, warn, info. The values
+                             must be lists of string messages for that notification level.
+    :param hide_meta: if True, hide any columns matching *_meta and use the JSON from these columns
+                      to format the matching column's values.
     :param ignore_params: list of query parameters to exclude from URLs
-    :param include_expand:
+    :param include_expand: if True, include a 'plus' button on each row that directs to the single-
+                           row view for that row.
     :param javascript: if True, include sprocket javascript in the HTML output.
     :param primary_key: The column name to use as the primary key for the table. This value will be
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
     :param show_filters: if True, show "filter by condition" options in header modals.
-    :param standalone:
-    :param total:
+    :param standalone: if True, do not include HTML headers.
+    :param total: if only a subset of the total results is passed to the render function, `total`
+                  must be specified to display the correct number of total results in the pagination
+                  bars. If not specified, the total will be the length of `data`
+    :param transform: dict of column name -> "transform" function (as a string that is evaluated)
+                      to apply to all cells in the column. Only builtin python methods should be
+                      used in the function. Literal strings should be encased in quotes within the
+                      string to ensure `eval` does not throw a SyntaxError.
     :return:
     """
     if columns:
@@ -377,19 +391,6 @@ def render_html_table(
         total = len(results)
         results = list(results)[offset : limit + offset]
 
-    # Set the options for the "results per page" drop down
-    options = []
-    limit_vals = {1, 10, 50, 100, 500, total}
-    if limit not in limit_vals:
-        limit_vals.add(limit)
-    limit_vals = sorted(limit_vals)
-    for lv in limit_vals:
-        # Make sure the 'selected' value is our current limit
-        if lv == limit:
-            options.append(f'<option value="{lv}" selected>{lv}</option>')
-        else:
-            options.append(f'<option value="{lv}">{lv}</option>')
-
     # Set the options for filtering - only if we're showing options
     headers = {}
     for h in header_names:
@@ -436,7 +437,6 @@ def render_html_table(
         "limit": limit,
         "messages": display_messages,
         "offset": offset,
-        "options": options,
         "select": columns,
         "show_filters": show_filters,
         "sort_asc": sort_asc,
@@ -481,7 +481,13 @@ def get_value_from_row(row, col):
 
 
 def render_swagger_table(
-    swagger_url, table, request_args, default_limit=100, javascript=True, standalone=False, swagger_cache=".swagger"
+    swagger_url,
+    table,
+    request_args,
+    default_limit=100,
+    javascript=True,
+    standalone=False,
+    swagger_cache=".swagger",
 ):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
     or a Response object containing TSV/CSV. Uses query parameters (request_args) to construct query

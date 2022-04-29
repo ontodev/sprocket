@@ -227,7 +227,13 @@ def get_urls(
     this_url = base_url + "?"
     if this_query:
         this_url += "&".join(this_query)
-    return {"first": first_url, "prev": prev_url, "next": next_url, "last": last_url, "this": this_url}
+    return {
+        "first": first_url,
+        "prev": prev_url,
+        "next": next_url,
+        "last": last_url,
+        "this": this_url,
+    }
 
 
 def parse_order_by(order) -> List[dict]:
@@ -341,7 +347,7 @@ def parse_where(where, column, postgres=False) -> Tuple[str, str]:
             col_name = f'lower("{column}")'
     else:
         query_op = operator.upper()
-    return statement + f'{col_name} {query_op}', constraint
+    return statement + f"{col_name} {query_op}", constraint
 
 
 class SprocketError(RuntimeError):
