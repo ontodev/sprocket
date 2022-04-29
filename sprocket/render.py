@@ -287,6 +287,10 @@ def render_html_table(
                 style = "null"
             if transform and k in transform:
                 v = transform[k].format(**{k: v})
+                try:
+                    v = eval(v)
+                except SyntaxError:
+                    raise SprocketError("Unable to eval transformation: " + v)
             values[k] = {"value": str(v), "style": style, "message": None, "header": k}
         results.append(values)
 
