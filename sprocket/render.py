@@ -31,7 +31,7 @@ FILTER_OPTS = {
     "lte": {"label": "less than or equals"},
     "neq": {"label": "not equals"},
     "like": {"label": "like"},
-    "ilike": {"label": "like (insensitive)"},
+    "ilike": {"label": "like (case insensitive)"},
     "is": {"label": "is"},
     "not.is": {"label": "is not"},
     "in": {"label": "in"},
@@ -396,7 +396,9 @@ def render_html_table(
     for h in header_names:
         fltr = request_args.get(h)
         if not fltr:
-            headers[h] = {"options": FILTER_OPTS, "has_selected": False}
+            cur_options = deepcopy(FILTER_OPTS)
+            cur_options["ilike"]["selected"] = True
+            headers[h] = {"options": cur_options}
             continue
         cur_options = deepcopy(FILTER_OPTS)
         # Make sure to split correctly in case constraint has a dot

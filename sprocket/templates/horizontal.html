@@ -147,9 +147,6 @@
 					{% set details = headers[th] %}
 					<div class="col-md-5">
 						<select class="form-select" id="{{ safe_header }}Operator" name="operator">
-							{% if not details.has_selected %}
-							<option selected></option>
-							{% endif %}
 							{% for val, optdetails in details.options.items() %}
 								{% if optdetails.selected %}
 								<option value="{{ val }}" selected>{{ optdetails.label }}</option>
