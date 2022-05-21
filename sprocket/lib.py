@@ -148,7 +148,7 @@ def get_urls(
     total_results: int,
     ignore_params: list = None,
     offset: int = 0,
-    limit: int = 100
+    limit: int = 100,
 ) -> Dict[str, str]:
     """Use the offset and limit to create important URLs for pagination in the HTML table output.
     This is a dict with 5 keys:

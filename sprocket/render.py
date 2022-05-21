@@ -331,7 +331,11 @@ def render_html_table(
                 except SyntaxError:
                     raise SprocketError("Unable to eval transformation: " + v)
             values[k] = {
-                "display": str(display), "value": v, "style": style, "message": None, "header": k
+                "display": str(display),
+                "value": v,
+                "style": style,
+                "message": None,
+                "header": k,
             }
         results.append(values)
 
@@ -506,11 +510,11 @@ def render_html_table(
 
 
 def render_swagger_table(
-    swagger_url,
-    table,
-    request_args,
-    default_limit=100,
-    javascript=True,
+    swagger_url: str,
+    table: str,
+    request_args: dict,
+    default_limit: int = 100,
+    javascript: bool = True,
     standalone: bool = True,
 ):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
