@@ -1,19 +1,21 @@
 import csv
 import json
+import logging
 import os
+
 import requests
 
 from copy import deepcopy
 from flask import render_template, Response
 from io import StringIO
 from jinja2 import Environment, PackageLoader
+from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import text as sql_text
 from urllib.parse import unquote
 from .lib import (
     exec_query,
     get_sql_columns,
     get_sql_tables,
-    get_swagger_details,
     get_urls,
     parse_order_by,
     parse_where,
@@ -40,21 +42,22 @@ FILTER_OPTS = {
 
 
 def render_database_table(
-    conn,
-    table,
-    request_args,
-    base_url=None,
-    default_limit=100,
-    display_messages=None,
-    hide_meta=True,
-    ignore_cols=None,
-    ignore_params=None,
-    javascript=True,
-    primary_key=None,
-    show_help=False,
-    standalone=True,
-    transform=None,
-    use_view=True,
+    conn: Connection,
+    table: str,
+    request_args: dict,
+    base_url: str = None,
+    default_limit: int = 100,
+    display_messages: dict = None,
+    edit_link: str = None,
+    hide_meta: bool = True,
+    ignore_cols: list = None,
+    ignore_params: list = None,
+    javascript: bool = True,
+    primary_key: str = None,
+    show_help: bool = False,
+    standalone: bool = True,
+    transform: dict = None,
+    use_view: bool = False,
 ):
     """Get the SQL table for the Flask app. Either return the rendered HTML or a Response object
     containing TSV/CSV. Utilizes Flask request_args to construct the query to return results.
@@ -64,12 +67,17 @@ def render_database_table(
     :param base_url: The base URL for this page without query parameters. By default, this is the
                      table name. It is used to construct navigation & export links.
     :param default_limit: The max number of results to show per page, unless 'limit' is provided in
-                        the query parameters.
+                          the query parameters.
     :param display_messages: dictionary containing messages to display as dismissible banners. The
                              dictionary can have the following keys: success, error, warn, info. The
                              values must be lists of string messages for that notification level.
+    :param edit_link: a string specifying a URL template that, if included, will add a pencil button
+                      on each row that directs to this link, where {row_id} is filled in with the
+                      row primary key (e.g., "table/{row_id}?edit=true") - primary_key must also be
+                      included in args.
     :param hide_meta: if True, hide any columns ending with '_meta'. These will be used to format
                       the cell value and (maybe) error message of the matching column.
+                      TODO: reference VALVE2
     :param ignore_cols: list of columns of the SQL table to exclude from query/results.
     :param ignore_params: list of query parameters to exclude from URL.
     :param javascript: if True, include sprocket javascript in the HTML output.
@@ -83,7 +91,7 @@ def render_database_table(
                       used in the function. Literal strings should be encased in quotes within the
                       string to ensure `eval` does not throw a SyntaxError.
     :param use_view: if True, attempt to retrieve results from a '*_view' table which combines the
-                      table and its conflict table."""
+                     table and its conflict table. TODO: reference VALVE2"""
     tables = get_sql_tables(conn)
     if table not in tables:
         raise SprocketError(f"'{table}' is not a valid table in the database")
@@ -99,12 +107,15 @@ def render_database_table(
         for res in results:
             descriptions[res["column"]] = res["description"]
 
+    # Parse request_args to set options
+    # limit: how many results to display per page
     limit = request_args.get("limit", default_limit)
     try:
         limit = int(limit)
     except ValueError:
         raise SprocketError(f"'limit' ({limit}) must be an integer")
 
+    # offset: idx to begin displaying results at from full list of results
     offset = request_args.get("offset", "0")
     try:
         offset = int(offset)
@@ -113,10 +124,12 @@ def render_database_table(
 
     limit = limit + offset
 
+    # fmt: return format (TSV & CSV will prompt downloads)
     fmt = request_args.get("format", "html")
     if fmt not in ["tsv", "csv", "html"]:
         raise SprocketError(f"'format' must be 'tsv', 'csv', or 'html', not '{fmt}'")
 
+    # select: which columns to display, excluding any ignore_cols
     select = request_args.get("select")
     if select:
         select_cols = select.split(",")
@@ -128,12 +141,16 @@ def render_database_table(
             )
         if hide_meta:
             # Add any necessary meta cols, since they don't appear in select filters
+            # This ensures that the data is returned in the query
             select_cols.extend([f"{x}_meta" for x in select_cols if f"{x}_meta" in table_cols])
     else:
+        # If select is not in request_args, use all columns from the database
         select_cols = table_cols
     if ignore_cols:
         select_cols = [x for x in select_cols if x not in ignore_cols]
 
+    # where: the query parameter is the column name, the value is an operator + constraint,
+    #        modeled on https://postgrest.org/en/latest/api.html#operators ('or' is not supported)
     where_statements = []
     for tc in table_cols:
         where = request_args.get(tc)
@@ -146,6 +163,8 @@ def render_database_table(
             return SprocketError(e)
         where_statements.append(stmt)
 
+    # order: sort the results by one or more columns + optional keywords (asc/desc, nulls order),
+    #        separated by commas - modeled on https://postgrest.org/en/latest/api.html#ordering
     order_by = []
     order = request_args.get("order")
     if order:
@@ -161,6 +180,9 @@ def render_database_table(
         except ValueError as e:
             return SprocketError(e)
 
+    # violations: when using "meta" columns, filter the results based on one or more violation
+    #             level, separated by commas
+    # TODO: include reference to VALVE2 tool
     violations = request_args.get("violations")
     if violations:
         violations = violations.split(",")
@@ -204,6 +226,7 @@ def render_database_table(
             default_limit=default_limit,
             descriptions=descriptions,
             display_messages=display_messages,
+            edit_link=edit_link,
             ignore_params=ignore_params,
             javascript=javascript,
             primary_key=primary_key,
@@ -224,25 +247,25 @@ def render_database_table(
 
 
 def render_html_table(
-    data,
-    table,
-    request_args,
-    base_url=None,
-    columns=None,
-    conflict_prefix="row/",
-    default_limit=100,
-    descriptions=None,
-    display_messages=None,
-    hide_meta=True,
-    ignore_params=None,
-    include_expand=True,
-    javascript=True,
-    primary_key=None,
-    show_filters=True,
-    standalone=True,
-    total=None,
-    transform=None,
-):
+    data: list,
+    table: str,
+    request_args: dict,
+    base_url: str = None,
+    columns: list = None,
+    conflict_prefix: str = "row/",
+    default_limit: int = 100,
+    descriptions: dict = None,
+    display_messages: dict = None,
+    edit_link: str = None,
+    hide_meta: bool = True,
+    ignore_params: list = None,
+    javascript: bool = True,
+    primary_key: str = None,
+    show_filters: bool = True,
+    standalone: bool = True,
+    total: int = None,
+    transform: dict = None,
+) -> str:
     """Render the data as an HTML table.
 
     :param data: SQL query results as list of dicts
@@ -253,18 +276,19 @@ def render_html_table(
     :param columns: Optional list of column names to display as headers of the HTML table.
                     If not provided, the keys of the first element of data are used as headers.
     :param conflict_prefix: Prefix to use for row_number when primary_key is provided and there is a
-                            primary_key conflict, e.g. row/32.
+                            primary_key conflict, e.g. row/32. TODO: reference VALVE2
     :param default_limit: the max number of rows to display on a single page, by default. This is
                           overriden by the `limit` param in `request_args`.
     :param descriptions: dict of column name to description to display tooltips in single-row view.
     :param display_messages: dict containing messages to display as dismissible banners. The dict
                              can have the following keys: success, error, warn, info. The values
                              must be lists of string messages for that notification level.
+    :param edit_link: a string specifying a URL template that, if included, will add a pencil button
+                      on each row that directs to this link, where {row_id} is filled in with the
+                      row primary key (e.g., "table/{row_id}?edit=true")
     :param hide_meta: if True, hide any columns matching *_meta and use the JSON from these columns
                       to format the matching column's values.
-    :param ignore_params: list of query parameters to exclude from URLs
-    :param include_expand: if True, include a 'plus' button on each row that directs to the single-
-                           row view for that row.
+    :param ignore_params: list of query parameters to exclude from any URLs
     :param javascript: if True, include sprocket javascript in the HTML output.
     :param primary_key: The column name to use as the primary key for the table. This value will be
                         included as a hidden td in each table row with the HTML ID of pk{row_num}.
@@ -277,7 +301,7 @@ def render_html_table(
                       to apply to all cells in the column. Only builtin python methods should be
                       used in the function. Literal strings should be encased in quotes within the
                       string to ensure `eval` does not throw a SyntaxError.
-    :return:
+    :return: HTML string
     """
     if columns:
         header_names = columns
@@ -296,16 +320,19 @@ def render_html_table(
         values = {}
         for k, v in res.items():
             style = None
-            if not v:
+            if v is None or (not isinstance(v, int) and not v):
                 v = ""
                 style = "null"
+            display = v
             if transform and k in transform:
-                v = transform[k].format(**{k: v})
+                display = transform[k].format(**{k: v})
                 try:
-                    v = eval(v)
+                    display = eval(display)
                 except SyntaxError:
                     raise SprocketError("Unable to eval transformation: " + v)
-            values[k] = {"value": str(v), "style": style, "message": None, "header": k}
+            values[k] = {
+                "display": str(display), "value": v, "style": style, "message": None, "header": k
+            }
         results.append(values)
 
     if hide_meta and results:
@@ -343,7 +370,7 @@ def render_html_table(
                 if not pk_value:
                     pk_value = metadata["value"]
                 res[value_col]["conflict_key"] = pk_value
-                res[value_col]["value"] = metadata["value"]
+                res[value_col]["display"] = metadata["value"]
                 if "nulltype" in metadata:
                     # Set null style and go to next
                     res[value_col]["style"] = "null"
@@ -389,6 +416,8 @@ def render_html_table(
 
     if not total:
         total = len(results)
+        if total < offset:
+            offset = 0
         results = list(results)[offset : limit + offset]
 
     # Set the options for filtering - only if we're showing options
@@ -433,8 +462,8 @@ def render_html_table(
                 sort_desc.append(ob["key"])
 
     render_args = {
+        "edit_link": edit_link,
         "headers": headers,
-        "include_expand": include_expand,
         "javascript": javascript,
         "limit": limit,
         "messages": display_messages,
@@ -449,37 +478,31 @@ def render_html_table(
         "urls": urls,
         "violations": violations,
     }
-    if limit == 1 or total == 1:
-        render_args["descriptions"] = descriptions
-        render_args["row"] = results[0]
-        template = "vertical.html"
-    else:
-        # Create the row to pass to template, to know what to display (hidden vs visible)
-        display_rows = []
-        for row in results:
-            # Find the values, maybe delete the item if it shouldn't be included in display
-            if primary_key:
-                # Key value is either the conflict key or just the value of the primary key col
-                key_val = row[primary_key].get("conflict_key", row[primary_key]["value"])
-                if primary_key not in header_names:
-                    del row[primary_key]
-                    if primary_key + "_meta" in row:
-                        del row[primary_key + "_meta"]
-            else:
-                key_val = None
-            display_rows.append({"cells": row, "row_key": key_val})
+    # TODO: we've removed single-row view for now
+    # if limit == 1 or total == 1:
+    # render_args["descriptions"] = descriptions
+    # render_args["row"] = results[0]
+    # template = "vertical.html"
+    # else:
+    # Create the row to pass to template, to know what to display (hidden vs visible)
+    display_rows = []
+    for row in results:
+        # Find the values, maybe delete the item if it shouldn't be included in display
+        if primary_key:
+            # Key value is either the conflict key or just the value of the primary key col
+            key_val = row[primary_key].get("conflict_key", row[primary_key]["value"])
+            if primary_key not in header_names:
+                del row[primary_key]
+                if primary_key + "_meta" in row:
+                    del row[primary_key + "_meta"]
+        else:
+            key_val = None
+        display_rows.append({"cells": row, "row_key": key_val})
 
-        render_args["rows"] = display_rows
-        template = "horizontal.html"
-    t = template_env.get_template(template)
+    render_args["rows"] = display_rows
+    # template = "horizontal.html"
+    t = template_env.get_template("horizontal.html")
     return t.render(**render_args)
-
-
-def get_value_from_row(row, col):
-    for cell in row:
-        if cell["header"] == col:
-            return cell["value"]
-    return None
 
 
 def render_swagger_table(
@@ -488,8 +511,7 @@ def render_swagger_table(
     request_args,
     default_limit=100,
     javascript=True,
-    standalone=False,
-    swagger_cache=".swagger",
+    standalone: bool = True,
 ):
     """Get the SQL table for the Flask app from a Swagger endpoint. Either return the rendered HTML
     or a Response object containing TSV/CSV. Uses query parameters (request_args) to construct query
@@ -497,31 +519,31 @@ def render_swagger_table(
 
     :param swagger_url: URL to remote database (Swagger)
     :param table: table name
-    :param request_args:
+    :param request_args: dict of HTTP request args (Flask request.args)
     :param default_limit: if limit parameter is not provided, default number of results to show
+    :param javascript: if True, include sprocket Javascript at bottom of HTML output
     :param standalone: if True, include HTML headers & script in HTML output.
-    :param swagger_cache: directory to store Swagger details
     :return: rendered HTML or Response containing table to download
     """
-    if not os.path.exists(swagger_cache):
-        os.mkdir(swagger_cache)
-
     # Create a URL to get JSON from
     url = swagger_url + "/" + table
     swagger_request_args = []
-    get_all_columns = False
 
     # Parse args and create request
     fmt = None
     has_limit = False
     for arg, value in request_args.items():
-        if arg == "select":
-            get_all_columns = True
         if arg == "limit":
+            # Overrides the default_limit
             has_limit = True
         if arg == "violations":
+            # Not supported by endpoint
+            logging.info(
+                "'violations' is not a valid parameter for Swagger endpoint and will be ignored"
+            )
             continue
         if arg == "format":
+            # We handle the format later
             fmt = value
             continue
         swagger_request_args.append(f"{arg}={value}")
@@ -532,8 +554,9 @@ def render_swagger_table(
     # Send request and get data + total rows
     if swagger_request_args:
         url += "?" + "&".join(swagger_request_args)
-    r = requests.get(url, verify=False)
+    r = requests.get(url, verify=False, headers={"Prefer": "count=estimated"})
     data = r.json()
+    total = int(r.headers["Content-Range"].split("/")[1])
 
     # Error from API
     if type(data) == dict:
@@ -557,22 +580,24 @@ def render_swagger_table(
         output = render_tsv_table(data, fmt=fmt)
         return Response(output, mimetype=mt)
 
-    columns, total = get_swagger_details(
-        swagger_url, table, data, get_all_columns=get_all_columns, swagger_cache=swagger_cache
-    )
     return render_html_table(
         data,
         table,
         request_args,
-        columns=columns,
-        total=total,
         default_limit=default_limit,
         javascript=javascript,
         standalone=standalone,
+        total=total,
     )
 
 
-def render_tsv_table(data, fmt="tsv"):
+def render_tsv_table(data: list, fmt: str = "tsv") -> str:
+    """Render the data as TSV
+
+    :param data: query results
+    :param fmt: table format (tsv or csv)
+    :return: string table output
+    """
     headers = data[0].keys()
     output = StringIO()
     sep = "\t"

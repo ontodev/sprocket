@@ -54,7 +54,7 @@
 <table class="table" id="sqlTableHorizontal">
 	<thead>
 		<tr>
-			{% if include_expand %} <th/> {% endif %}
+			{% if include_edit %} <th/> {% endif %}
 			{% for th in headers %}
 			{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
 			<th class="px-0">
@@ -71,20 +71,20 @@
 			<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
 			{% if row["row_key"] %}
 			<td id="pk{{ vars.row_num }}" style="display: none;">{{ row["row_key"] }}</td>
+			{% if include_edit %}
+			<!-- Show a pencil button at the start of the row to switch to form for that row -->
+			<td>
+				<a class="btn btn-sm" href="{{ edit_link | replace('{row_id}', row['row_key']) }}"><i class="bi-pencil" style="color: #adb5bd;"></i></a>
+			</td>
+			{% endif %}
 			{% endif %}
 			<!-- Track the cell numbers within this row -->
 			{% set inner_vars = {'cell_num': 0} %}
-			{% if include_expand %}
-			<!-- Show a plus button at the start of the row to switch to vertical view -->
-			<td>
-				<a class="btn btn-sm" id="vert{{ vars.row_num }}" href="javascript:showVertical({{ vars.row_num }}, {{ offset }})"><i class="bi-plus-lg" style="color: #adb5bd;"></i></a>
-			</td>
-			{% endif %}
 			{% for th in headers %}
 			{% set cell = row["cells"][th] %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
 			{% if cell %}
-				{% if cell["value"]|length > 100 and " " not in cell["value"].strip() %}
+				{% if cell["display"]|length > 100 and " " not in cell["display"].strip() %}
 					{% set extra_class = " long-word" %}
 				{% else %}
 					{% set extra_class = "" %}
@@ -99,7 +99,7 @@
 					<td class="bg-{{ cell['style'] }}{{ extra_class }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ tooltip_msg|safe }}">
 						<div class="row justify-content-between">
 							<div class="col-auto gy-1" id="value{{ vars.row_num }}-{{ inner_vars.cell_num }}">
-								{{ cell["value"]|safe }}
+								{{ cell["display"]|safe }}
 							</div>
 							<div class="col-auto">
 								<a class="btn btn-sm" id="expand{{ vars.row_num }}-{{ inner_vars.cell_num }}" href="javascript:expand('{{ cell['style'] }}', '{{ cell['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><i class="bi-plus"></i></a>
@@ -107,9 +107,9 @@
 						</div>
 					</td>
 				{% elif cell["style"] %}
-					<td class="bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["value"]|safe }}</td>
+					<td class="bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["display"]|safe }}</td>
 				{% else %}
-					<td class="{{ extra_class }}">{{ cell["value"]|safe }}</td>
+					<td class="{{ extra_class }}">{{ cell["display"]|safe }}</td>
 				{% endif %}
 			{% else %}
 			<td></td>
