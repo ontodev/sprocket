@@ -97,15 +97,16 @@ def render_database_table(
         raise SprocketError(f"'{table}' is not a valid table in the database")
     table_cols = get_sql_columns(conn, table)
 
-    descriptions = {}
+    # TODO: descriptions only used in vertical view, which is disabled for now
+    """descriptions = {}
     if show_help and "column" in tables:
         query = sql_text(
-            """SELECT "column", description FROM "column"
-               WHERE "table" = :table AND description IS NOT NULL"""
+            \"""SELECT "column", description FROM "column"
+               WHERE "table" = :table AND description IS NOT NULL\"""
         )
         results = conn.execute(query, table=table)
         for res in results:
-            descriptions[res["column"]] = res["description"]
+            descriptions[res["column"]] = res["description"]"""
 
     # Parse request_args to set options
     # limit: how many results to display per page
@@ -224,7 +225,7 @@ def render_database_table(
             base_url=base_url,
             columns=select_cols,
             default_limit=default_limit,
-            descriptions=descriptions,
+            # descriptions=descriptions,
             display_messages=display_messages,
             edit_link=edit_link,
             ignore_params=ignore_params,

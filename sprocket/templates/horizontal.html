@@ -54,7 +54,7 @@
 <table class="table" id="sqlTableHorizontal">
 	<thead>
 		<tr>
-			{% if include_edit %} <th/> {% endif %}
+			{% if edit_link %} <th/> {% endif %}
 			{% for th in headers %}
 			{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
 			<th class="px-0">
@@ -71,7 +71,7 @@
 			<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
 			{% if row["row_key"] %}
 			<td id="pk{{ vars.row_num }}" style="display: none;">{{ row["row_key"] }}</td>
-			{% if include_edit %}
+			{% if edit_link %}
 			<!-- Show a pencil button at the start of the row to switch to form for that row -->
 			<td>
 				<a class="btn btn-sm" href="{{ edit_link | replace('{row_id}', row['row_key']) }}"><i class="bi-pencil" style="color: #adb5bd;"></i></a>
