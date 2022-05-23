@@ -97,16 +97,15 @@ def render_database_table(
         raise SprocketError(f"'{table}' is not a valid table in the database")
     table_cols = get_sql_columns(conn, table)
 
-    # TODO: descriptions only used in vertical view, which is disabled for now
-    """descriptions = {}
+    descriptions = {}
     if show_help and "column" in tables:
         query = sql_text(
-            \"""SELECT "column", description FROM "column"
-               WHERE "table" = :table AND description IS NOT NULL\"""
+            """SELECT "column", description FROM "column"
+               WHERE "table" = :table AND description IS NOT NULL"""
         )
         results = conn.execute(query, table=table)
         for res in results:
-            descriptions[res["column"]] = res["description"]"""
+            descriptions[res["column"]] = res["description"]
 
     # Parse request_args to set options
     # limit: how many results to display per page
@@ -225,7 +224,7 @@ def render_database_table(
             base_url=base_url,
             columns=select_cols,
             default_limit=default_limit,
-            # descriptions=descriptions,
+            descriptions=descriptions,
             display_messages=display_messages,
             edit_link=edit_link,
             ignore_params=ignore_params,
@@ -483,30 +482,28 @@ def render_html_table(
         "urls": urls,
         "violations": violations,
     }
-    # TODO: we've removed single-row view for now
-    # if limit == 1 or total == 1:
-    # render_args["descriptions"] = descriptions
-    # render_args["row"] = results[0]
-    # template = "vertical.html"
-    # else:
-    # Create the row to pass to template, to know what to display (hidden vs visible)
-    display_rows = []
-    for row in results:
-        # Find the values, maybe delete the item if it shouldn't be included in display
-        if primary_key:
-            # Key value is either the conflict key or just the value of the primary key col
-            key_val = row[primary_key].get("conflict_key", row[primary_key]["value"])
-            if primary_key not in header_names:
-                del row[primary_key]
-                if primary_key + "_meta" in row:
-                    del row[primary_key + "_meta"]
-        else:
-            key_val = None
-        display_rows.append({"cells": row, "row_key": key_val})
-
-    render_args["rows"] = display_rows
-    # template = "horizontal.html"
-    t = template_env.get_template("horizontal.html")
+    if limit == 1 or total == 1:
+        render_args["descriptions"] = descriptions
+        render_args["row"] = results[0]
+        template = "vertical.html"
+    else:
+        # Create the row to pass to template, to know what to display (hidden vs visible)
+        display_rows = []
+        for row in results:
+            # Find the values, maybe delete the item if it shouldn't be included in display
+            if primary_key:
+                # Key value is either the conflict key or just the value of the primary key col
+                key_val = row[primary_key].get("conflict_key", row[primary_key]["value"])
+                if primary_key not in header_names:
+                    del row[primary_key]
+                    if primary_key + "_meta" in row:
+                        del row[primary_key + "_meta"]
+            else:
+                key_val = None
+            display_rows.append({"cells": row, "row_key": key_val})
+        template = "horizontal.html"
+        render_args["rows"] = display_rows
+    t = template_env.get_template(template)
     return t.render(**render_args)
 
 
