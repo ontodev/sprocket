@@ -1,349 +1,94 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if show_options %}
-<div class="row" style="padding:10px;">
-	<div class="accordion" id="accordionOptions">
-		<div class="accordion-item">
-			<h2 class="accordion-header">
-				<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseOptions">
-					<strong>Query Options</strong>
-				</button>
-			</h2>
-			<div id="collapseOptions" class="accordion-collapse collapse" data-bs-parent="#accordionOptions">
-				<div class="accordion-body">
-					<form method="get">
-						<div class="row g-3">
-							<div class="col-md-7" style="padding-right:30px;">
-								<p class="lead">Filter results</p>
-								{% for h, details in headers.items() %}
-								{% if h != "rowid" %}
-								<div class="row">
-									<div class="col-sm-4 col-form-label">
-										<label>{{ h }}</label>
-									</div>
-									<div class="col-sm-3">
-										<select class="form-select" id="{{ h }}Operator" name="operator">
-											{% if not details.has_selected %}
-											<option selected></option>
-											{% endif %}
-											{% for val, optdetails in details.options.items() %}
-												{% if optdetails.selected %}
-												<option value="{{ val }}" selected>{{ optdetails.label }}</option>
-												{% else %}
-												<option value="{{ val }}">{{ optdetails.label }}</option>
-												{% endif %}
-											{% endfor %}
-										</select>
-									</div>
-									<div class="col-sm-5">
-										{% if details.const %}
-										<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text" value="{{ details.const }}">
-										{% else %}
-										<input class="form-control" id="{{ h }}Constraint" name="constraint" type="text">
-										{% endif %}
-									</div>
-								</div>
-								{% endif %}
-								{% endfor %}
-							</div>
-							<div class="col-md-3">
-								<p class="lead">Show columns</p>
-								<div class="row">
-									{% for s in select %}
-									<div class="form-check">
-										{% if s in headers %}
-										<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}" checked>
-										{% else %}
-										<input class="form-check-input" type="checkbox" name="select[]" id="{{ s }}" value="{{ s }}">
-										{% endif %}
-										<label class="form-check-label" for="{{ s }}">{{ s }}</label>
-									</div>
-									{% endfor %}
-								</div>
-								<input type="hidden" id="select" name="select" value="">
-							</div>
-							<div class="col-md-2">
-								<div class="row">
-									<p class="lead">Filter violations</p>
-									<div class="row">
-										<div class="col-md-6">
-											<div class="form-check">
-												{% if "debug" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="debug" value="debug">
-												{% endif %}
-												<label class="form-check-label" for="debug">debug</label>
-											</div>
-											<div class="form-check">
-												{% if "warn" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="warn" value="warn">
-												{% endif %}
-												<label class="form-check-label" for="warn">warn</label>
-											</div>
-										</div>
-										<div class="col-md-6">
-											<div class="form-check">
-												{% if "info" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="info" value="info">
-												{% endif %}
-												<label class="form-check-label" for="info">info</label>
-											</div>
-											<div class="form-check">
-												{% if "error" in violations %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error" checked>
-												{% else %}
-												<input class="form-check-input" type="checkbox" name="violation[]" id="error" value="error">
-												{% endif %}
-												<label class="form-check-label" for="error">error</label>
-											</div>
-										</div>
-									</div>
-								</div>
-								<div class="row" style="padding-top: 20px;">
-									<div class="col-auto">
-										<label for="limitValue" class="col-form-label">Results per page</label>
-									</div>
-									<div class="col-auto">
-										<select class="form-select" id="limitValue" name="limit">
-											{{ options|safe }}
-										</select>
-									</div>
-								</div>
-								{% for k, v in hidden.items() %}
-								<input id="{{ k }}" value="{{ v }}" hidden/>
-								{% endfor %}
-								<div class="row" style="padding-top:20px;">
-									<div class="col-auto">
-										<a class="btn btn-secondary" href="javascript:reset()">Reset</a>
-									</div>
-									<div class="col-auto">
-										<input type="button" onclick="submitForm({{ headers.keys() | list }}, {{ hidden.keys() | list }});" class="btn btn-primary" value="Update">
-									</div>
-								</div>
-							</div>
-						</div>
-					</form>
+{% block subcontent %}
+{% endblock %}
+
+<div class="row justify-content-between pe-0 py-2 mb-5">
+	<div class="col-auto">
+		{% if not urls["this"].endswith('?') %}
+			{% set this_url = urls["this"] + '&' %}
+		{% else %}
+			{% set this_url = urls["this"] %}
+		{% endif %}
+		<p>Download results: <a href="{{ this_url }}format=tsv">tsv</a> | <a href="{{ this_url }}format=csv">csv</a></p>
+	</div>
+	<!-- Pagination -->
+	<div class="col-auto px-0">
+		<div class="btn-group">
+			{# if there are no rows, this is a single-item page, otherwise check row length #}
+			{% set has_results = True %}
+			{% if rows is defined %}
+				{% set has_results = rows|length > 0 %}
+			{% endif %}
+			{% if has_results and urls["prev"] %}
+				<a href="{{ urls['first'] }}" class="btn btn-outline-primary">first</a>
+				<a href="{{ urls['prev'] }}" class="btn btn-outline-primary">prev</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">first</a>
+				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
+			{% endif %}
+
+			{% if not has_results or total == 1 %}
+			{# No results, disable button to change loc (nowhere to go) #}
+			<button type="button" class="btn btn-outline-secondary disabled">
+				{% if not has_results %}
+				0 of 0
+				{% else %}
+				1 of 1
+				{% endif %}
+			</button>
+			{% else %}
+			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
+				{% if rows is not defined or limit == 1 %}
+				{{ offset + 1 }} of {{ total }}
+				{% else %}
+				{# length of rows (what is shown, may be less than limit) plus offset is the loc of last row #}
+				{{ offset + 1 }}-{{ rows|length + offset }} of {{ total }}
+				{% endif %}
+			</button>
+			{% endif %}
+
+			{% if has_results and urls["next"] %}
+				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
+				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">next</a>
+				<a href="#" class="btn btn-outline-secondary disabled">last</a>
+			{% endif %}
+		</div>
+	</div>
+</div>
+
+<div class="modal fade" id="updateLoc" tabindex="-1">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">Show Results</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body">
+				<div class="row py-2">
+					<div class="col-md-4">
+						<label class="col-form-label">Results per page</label>
+					</div>
+					<div class="col-auto">
+						<input type="number" id="limitValue" class="form-control" value="{{ limit }}">
+					</div>
 				</div>
+				<div class="row py-2">
+					<div class="col-md-4">
+						<label class="col-form-label">Jump to row</label>
+					</div>
+					<div class="col-auto">
+						<input type="number" class="form-control" id="offsetValue" value="{{ offset + 1 }}">
+					</div>
+				</div>
+			</div>
+			<div class="modal-footer">
+        		<a type="button" class="btn btn-sm btn-primary" href="javascript:updateLoc()">Update</a>
 			</div>
 		</div>
 	</div>
 </div>
-{% endif %}
-
-{% block subcontent %}
-{% endblock %}
-
-<div class="row" style="padding-left:10px; padding-right:10px;">
-	<div class="col">
-		{% if rows %}
-			{% set len = (rows|length + offset) %}
-		{% else %}
-			{% set len = offset + 1 %}
-		{% endif %}
-		{% if (limit + offset) > len %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ len }} of {{ total }}</p>
-		{% else %}
-			<p class="fst-italic">Showing results {{ offset + 1 }}-{{ limit + offset }} of {{ total }}</p>
-		{% endif %}
-	</div>
-	<div class="col">
-		<div class="float-end">
-			{% if prev_url %}
-			<a href="{{ prev_url }}">Previous</a>
-			{% endif %}
-			{% if prev_url and next_url %}
-			&nbsp;|&nbsp;
-			{% endif %}
-			{% if next_url %}
-			<a href="{{ next_url }}">Next</a>
-			{% endif %}
-		</div>
-	</div>
-</div>
-<div class="row" style="padding-left:10px; padding-right:10px;">
-	<div class="col">
-		{% if not this_url.endswith('?') %}
-			{% set this_url = this_url + '&' %}
-		{% endif %}
-		<p>Download results: <a href="{{ this_url }}format=tsv">tsv</a> | <a href="{{ this_url }}format=csv">csv</a></p>
-	</div>
-</div>
-
-{% if standalone %}
-<script>
-	// Enable tooltips
-	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-	  return new bootstrap.Tooltip(tooltipTriggerEl)
-	})
-
-	// Init headers
-	var headers = [];
-	{% for h in headers %}
-	headers.push('{{ h }}');
-	{% endfor %}
-
-	function condense(level, msg, rowNum, cellNum) {
-		document.getElementById(`expandedRow${rowNum}`).remove();
-
-		// Add tooltip
-		var td = document.getElementById(`td${rowNum}-${cellNum}`);
-		td.setAttribute("data-bs-toggle", "tooltip");
-		td.setAttribute("data-bs-placement", "bottom");
-		td.setAttribute("data-bs-original-title", msg);
-		td.setAttribute("title", msg);
-
-		// Update btn
-		var btn = document.getElementById(`expand${rowNum}`);
-		btn.href = `javascript:expand('${level}', '${msg}', ${rowNum}, ${cellNum})`;
-		var txt = document.getElementById(`expandInner${rowNum}`);
-		txt.innerText = "+";
-	}
-
-	function expand(level, msg, rowNum, cellNum) {
-		var row = document.getElementById(`row${rowNum}`);
-		var newHtml = `<tr id="expandedRow${rowNum}">`;
-		for (i=0; i < cellNum; i++) {
-			newHtml += "<td></td>";
-		}
-		newHtml += `<td>${level.toUpperCase()}: ${msg}</td>`
-		row.insertAdjacentHTML('afterend', newHtml);
-
-		// Remove tooltip
-		var td = document.getElementById(`td${rowNum}-${cellNum}`);
-		var tooltipID = td.getAttribute("aria-describedby");
-		td.removeAttribute("data-bs-toggle");
-		td.removeAttribute("data-bs-placement");
-		td.removeAttribute("data-bs-original-title");
-		td.removeAttribute("title");
-		td.removeAttribute("aria-describedby");
-		var tt = document.getElementById(tooltipID);
-		if (tt !== null) {
-			tt.remove();
-		}
-
-		// Update btn
-		var btn = document.getElementById(`expand${rowNum}`);
-		btn.href = `javascript:condense('${level}', '${msg}', ${rowNum}, ${cellNum})`;
-		var txt = document.getElementById(`expandInner${rowNum}`);
-		txt.innerText = "-";
-	}
-
-	function reset() {
-		var url = window.location.href.split('?')[0];
-		window.location.href = url;
-	}
-
-	function sort(col, desc) {
-		// Get current parameters
-		var qString = window.location.search;
-		var params = new URLSearchParams(qString);
-		var newParams = [];
-		var newOrder = [];
-		// Add all current params to new params, only add order keys that are not col
-		for (var entry of params.entries()) {
-			if (entry[0] !== "order") {
-				newParams.push(`${entry[0]}=${entry[1]}`);
-			} else {
-				for (var ord of entry[1].split(",")) {
-					if (!ord.startsWith(col + ".") && ord !== col) {
-						newOrder.push(ord);
-					}
-				}
-			}
-		}
-		// Add this col to the order
-		if (desc) {
-			newOrder.push(col + ".desc");
-		} else {
-			newOrder.push(col);
-		}
-		// Redirect to new URL
-		newParams.push("order=" + newOrder.join(","));
-		if (newParams.length > 0) {
-			window.location.href = "?" + newParams.join("&");
-		}
-	}
-
-	function submitForm(headers, hidden) {
-		var args = []
-		headers = headers.filter(e => e !== "rowid");
-		// Get the where options
-		for (var h of headers) {
-			var operator = document.getElementById(h + 'Operator').value;
-			var constraint = document.getElementById(h + 'Constraint').value;
-			if (operator && constraint) {
-				args.push(h + "=" + operator + "." + constraint);
-			}
-		}
-
-		// Get any hidden args
-		for (var h of hidden) {
-			var val = document.getElementById(h).value;
-			args.push(h + "=" + val);
-		}
-
-		// Get the select options
-		var n = document.getElementsByName('select[]');
-		var s = [];
-		for (i=0; i < (n.length); i++) {
-			if (n[i].checked) {
-				s.push(n[i].value);
-			}
-		}
-		if (s.length > 0 && s.length < headers.length) {
-			args.push("select=" + s.join(","));
-		}
-
-		// Get the violation filters
-		var n = document.getElementsByName('violation[]');
-		var v = [];
-		for (i=0;i < (n.length); i++) {
-			console.log(n[i].checked);
-			if (n[i].checked) {
-				v.push(n[i].value);
-			}
-		}
-		if (v.length > 0) {
-			args.push("violations=" + v.join(","));
-		}
-
-		// Get the limit option
-		var l = document.getElementById("limitValue").value;
-		args.push("limit=" + l);
-
-		// Redirect to new URL
-		if (args.length > 0) {
-			window.location.href = "?" + args.join("&")
-		}
-	}
-
-	function vertical(rowNum, offset) {
-		var qString = window.location.search;
-		var params = new URLSearchParams(qString);
-		var newParams = [];
-		for (var entry of params.entries()) {
-			if (entry[0] === "limit" || entry[0] === "offset") {
-				continue;
-			} else {
-				newParams.push(`${entry[0]}=${entry[1]}`);
-			}
-		}
-		console.log(newParams);
-		var newOS = rowNum + offset - 1;
-		newParams.push(`offset=${newOS}`);
-		newParams.push("limit=1");
-		if (newParams.length > 0) {
-			window.location.href = "?" + newParams.join("&");
-		}
-	}
-</script>
-{% endif %}
-
 {% endblock %}

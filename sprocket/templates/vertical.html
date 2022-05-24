@@ -2,11 +2,9 @@
 {% block subcontent %}
 
 <div class="row" id="sqlTableVertical" style="padding-bottom:5px;">
-    {% for header, value in row.items() %}
-    <div id="{{ header }}" class="row border-bottom data-row" style="margin-left: 10px; margin-right:10px;">
-        {% if header == "rowid" %}
-        <input id="row-id" value='{{ value["value"] }}' hidden/>
-        {% else %}
+    {% for header in headers %}
+    {% set cell = row[header] %}
+    <div class="row border-bottom align-items-center">
         <div class="col-md-3">
             <div class="row">
                 <div class="col-auto">
@@ -17,7 +15,17 @@
                 </div>
             </div>
         </div>
-        <div class="col-md-9" id="{{ header }}-value">{{ value["value"]|safe }}</div>
+        {% if cell["display"]|length > 100 and " " not in cell["display"].strip() %}
+            {% set extra_class = " long-word" %}
+        {% else %}
+            {% set extra_class = "" %}
+        {% endif %}
+        {% if cell["style"] and cell["message"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ cell['message']|safe }}">{{ cell["display"]|safe }}</div>
+        {% elif cell["style"] %}
+        <div class="col-md-9 bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["display"]|safe }}</div>
+        {% else %}
+        <div class="col-md-9{{extra_class}}">{{ cell["display"]|safe }}</div>
         {% endif %}
     </div>
     {% endfor %}

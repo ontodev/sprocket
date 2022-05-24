@@ -7,31 +7,77 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js"></script>
 	<style>
+		table {
+		  border-collapse: separate;
+		  border-spacing: 0px;
+		}
+		thead th {
+		  position: sticky;
+		  top: 0px;
+		  white-space: nowrap;
+		  background-color: #fff !important;
+		  border-bottom-width: 1px;
+		  z-index: 2;
+		}
+		tbody {
+		  z-index: 1;
+		}
+		td {
+		  vertical-align: middle;
+		}
+		td ul {
+		  margin-left: -1rem !important;
+		  margin-block: 0rem !important;
+		}
+		p {
+		  margin-bottom: 0rem !important;
+		}
+
+		.long-word {
+		  word-break: break-all;
+		}
 		.bg-debug {
-			background-color: #abc4ff !important;
+		  background-color: #abc4ff !important;
+		}
+		a.bg-debug:hover {
+		  background-color: #4d82ff !important;
 		}
 		.bg-error {
-			background-color: #ffabab !important;
+		  background-color: #ffabab !important;
+		}
+		a.bg-error:hover {
+		  background-color: #ff4d4d !important;
 		}
 		.bg-info {
-			background-color: #fff8ab !important;
+		  background-color: #fff8ab !important;
+		}
+		a.bg-info:hover {
+		  background-color: #fff04d !important;
 		}
 		.bg-null {
-			background-color: #ededed !important;
+		  color: #cfcfcf;
+		}
+		.bg-null:before {
+		  content: "null";
 		}
 		.bg-warn {
-			background-color: #ffcdab !important;
+		  background-color: #ffcdab !important;
 		}
-		.inner-btn {
-			margin-top: -11px;
-			margin-left: -3px;
-		}
-		.sm-btn {
-			height: 18px;
-			width: 30px;
+		a.bg-warn:hover {
+		  background-color: #ff944d !important;
 		}
 		.tooltip-inner {
-			white-space: pre-wrap;
+		  white-space: pre-wrap;
+		}
+
+		#sqlTableHorizontal, #sqlTableVertical {
+		  vertical-align: inherit !important;
+		}
+		#sqlTableVertical {
+		  margin: 1rem
+		}
+		#sqlTableVertical .row {
+		  padding: 0.2rem 0rem 0.2rem 0rem;
 		}
 	</style>
 	{% if title %}
@@ -39,11 +85,328 @@
 	{% endif %}
 </head>
 <body>
+<div class="container-fluid">
+	<nav class="navbar navbar-expand-lg">
+		<div class="container-fluid align-middle justify-content-start">
+			{% if title %}
+			<a href="/"><i style="font-size: 36px" class="bi-gear"></i></a>
+			<p class="navbar-brand px-2">{{ title }}</p>
+			{% else %}
+			<a href="/"><i style="font-size: 36px" class="bi-gear"></i></a>
+			{% endif %}
+		</div>
+	</nav>
+	{% endif %}
+		{% block content %}
+		{{ default|safe }}
+		{% endblock %}
+	{% if javascript %}
+<script>
+	// Init headers
+	var headers = [];
+	{% for h in headers %}
+	headers.push('{{ h }}');
+	{% endfor %}
+
+	function addIcons() {
+		var url = new URL(window.location.href);
+		for (var h of headers) {
+			var filter = url.searchParams.get(h);
+			if (!filter) {
+				continue;
+			}
+			var ele = document.getElementById(h.replace(" ", "_").replace(":", "_"));
+			if (!ele) {
+				console.log("missing " + h);
+				continue;
+			}
+			var icon = document.createElement("i");
+			icon.setAttribute("class", "bi-funnel ps-1");
+			icon.setAttribute("style", "color: gray");
+			ele.appendChild(icon);
+		}
+		var order = url.searchParams.get("order");
+		if (order) {
+			for (var o of order.split(",")) {
+				var asc = true;
+				if (o.endsWith(".asc")) {
+					o = o.slice(0, -4);
+				} else if (o.endsWith(".desc")) {
+					asc = false;
+					o = o.slice(0, -5);
+				}
+				var ele = document.getElementById(o.replace(" ", "_").replace(":", "_"));
+				if (!ele) {
+					continue;
+				}
+				var icon = document.createElement("i");
+				var classes = [];
+				if (asc) {
+					classes.push("bi-sort-up");
+				} else {
+					classes.push("bi-sort-down");
+				}
+				if (!url.searchParams.get(o)) {
+					classes.push("ps-1");
+				}
+				icon.setAttribute("class", classes.join(" "));
+				icon.setAttribute("style", "color: gray");
+				ele.appendChild(icon);
+			}
+		}
+	}
+
+	function collapse(level, msg, rowNum, cellNum) {
+		/**
+		 * Collapse violation messages for a cell at given location.
+		 */
+		// Remove the message from the value of the cell
+		var value = document.getElementById(`value${rowNum}-${cellNum}`);
+		for (var n of value.childNodes) {
+			try {
+				if (n.getAttribute("class") === "fst-italic") {
+					value.removeChild(n);
+					break;
+				}
+			} catch (e) {
+				// no function getAttribute for strings
+				continue;
+			}
+		}
+
+		var tooltipMsg = msg;
+		if (msg.length > 105) {
+			var tooltipMsg = msg.substring(0, 80) + "<br><i>... and more</i>";
+		}
+
+		// Add tooltip
+		var td = document.getElementById(`td${rowNum}-${cellNum}`);
+		td.setAttribute("data-bs-toggle", "tooltip");
+		td.setAttribute("data-bs-placement", "bottom");
+		td.setAttribute("data-bs-original-title", tooltipMsg);
+		td.setAttribute("title", tooltipMsg);
+
+		// Update btn
+		var btn = document.getElementById(`expand${rowNum}-${cellNum}`);
+		btn.href = `javascript:expand('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+		btn.innerHTML = '<i class="bi-plus"></i>';
+	}
+
+	function expand(level, msg, rowNum, cellNum) {
+		/**
+		 * Expand violation messages for a cell at given location.
+		 */
+		// Get the current cell value & add the message below
+		var value = document.getElementById(`value${rowNum}-${cellNum}`);
+		value.innerHTML = value.innerText + `<br><small class="fst-italic">${msg}</small>`;
+
+		// Remove tooltip
+		var td = document.getElementById(`td${rowNum}-${cellNum}`);
+		var tooltipID = td.getAttribute("aria-describedby");
+		td.removeAttribute("data-bs-toggle");
+		td.removeAttribute("data-bs-placement");
+		td.removeAttribute("data-bs-original-title");
+		td.removeAttribute("title");
+		td.removeAttribute("aria-describedby");
+		var tt = document.getElementById(tooltipID);
+		if (tt !== null) {
+			tt.remove();
+		}
+
+		// Update btn
+		var btn = document.getElementById(`expand${rowNum}-${cellNum}`);
+		btn.href = `javascript:collapse('${level}', '${msg}', ${rowNum}, ${cellNum})`;
+		btn.innerHTML = '<i class="bi-dash"></i>';
+	}
+
+	function hide(col) {
+		var url = new URL(window.location.href);
+		var curSelectStr = url.searchParams.get("select");
+		if (curSelectStr) {
+			var select = curSelectStr.split(",");
+		} else {
+			select = headers;
+		}
+		select = select.filter(e => e !== col);
+		url.searchParams.set("select", select.join(","));
+		window.location.href = url;
+	}
+
+	function jump(curOffset) {
+		var newOffset = prompt("Jump to row", curOffset);
+		if (newOffset) {
+			var url = new URL(window.location.href);
+			url.searchParams.set("offset", parseInt(newOffset) - 1);
+			window.location.href = url;
+		}
+	}
+
+	function reset() {
+		/**
+		 * Reset the query parameters to clear the form.
+		 */
+		var url = window.location.href.split('?')[0];
+		window.location.href = url;
+	}
+
+	function sort(col, direction) {
+		/**
+		 * Sort query results. The actual sorting is done server-side,
+		 * but this bit of script creates the correct query parameters.
+		 */
+		var url = new URL(window.location.href);
+		var curOrder = url.searchParams.get("order");
+		var newOrder = [];
+		if (curOrder !== null) {
+			for (var ord of curOrder.split(",")) {
+				if (!ord.startsWith(col + ".") && ord !== col) {
+					newOrder.push(ord);
+				}
+			}
+		}
+		newOrder.push(`${col}.${direction}`);
+		url.searchParams.set("order", newOrder.join(","));
+		window.location.href = url;
+	}
+
+	function submitForm(col) {
+		var url = new URL(window.location.href);
+		var operator = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Operator`).value;
+		var constraint = document.getElementById(`${col.replace(" ", "_").replace(":", "_")}Constraint`).value;
+		if (operator && constraint) {
+			if ((operator == "in" || operator == "not.in") && !constraint.startsWith("(")) {
+				// Wrap constraint in parens for a list
+				constraint = `(${constraint})`
+			}
+			url.searchParams.set(col, operator + "." + encodeURIComponent(constraint));
+			window.location.href = url;
+		}
+	}
+
+	function updateLoc() {
+		var offset = document.getElementById("offsetValue").value;
+		var limit = document.getElementById("limitValue").value;
+		var url = new URL("{{ urls['this'] }}", document.baseURI);
+
+		// Set new location and redirect
+		if (offset) {
+			url.searchParams.set("offset", offset - 1);
+		}
+		if (limit) {
+			url.searchParams.set("limit", limit);
+		}
+		window.location.href = url;
+	}
+
+	function violations(level) {
+		var url = new URL(window.location.href);
+		var curViolations = url.searchParams.get("violations");
+		if (curViolations !== null) {
+			curViolations = curViolations.split(",");
+			if (curViolations.includes(level)) {
+				return;
+			}
+			curViolations.push(level);
+			url.searchParams.set("violations", curViolations.join(","));
+		} else {
+			url.searchParams.set("violations", level);
+		}
+		window.location.href = url;
+	}
+
+	function submitQueryForm(headers, hidden) {
+		/**
+		 * Submit the form to update query parameters and change search results. Include hidden form elements.
+		 */
+		var args = []
+		// Get the where options
+		for (var h of headers) {
+			var operator = document.getElementById(h + 'Operator').value;
+			var constraint = document.getElementById(h + 'Constraint').value;
+			if (operator && constraint) {
+				args.push(h + "=" + operator + "." + encodeURIComponent(constraint));
+			}
+		}
+
+		// Get any hidden args
+		for (var h of hidden) {
+			var val = document.getElementById(h).value;
+			args.push(h + "=" + val);
+		}
+
+		// Get the select options
+		var n = document.getElementsByName('select[]');
+		var s = [];
+		for (i=0; i < (n.length); i++) {
+			if (n[i].checked) {
+				s.push(n[i].value);
+			}
+		}
+		if (s.length > 0 && s.length < headers.length) {
+			args.push("select=" + s.join(","));
+		}
+
+		// Get the violation filters
+		var n = document.getElementsByName('violation[]');
+		var v = [];
+		for (i=0;i < (n.length); i++) {
+			console.log(n[i].checked);
+			if (n[i].checked) {
+				v.push(n[i].value);
+			}
+		}
+		if (v.length > 0) {
+			args.push("violations=" + v.join(","));
+		}
+
+		// Get the limit option
+		var l = document.getElementById("limitValue").value;
+		args.push("limit=" + l);
+
+		// Redirect to new URL
+		if (args.length > 0) {
+			window.location.href = "?" + args.join("&")
+		}
+	}
+
+	// Enable tooltips
+	var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+	var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+	  return new bootstrap.Tooltip(tooltipTriggerEl)
+	})
+
+	addIcons();
+
+	// Display hints for filters
+	$(function() {
+		$('select[name="operator"]').on('change', function(event) {
+			var ele = document.getElementById("filterHint");
+			if (ele) {
+				ele.remove();
+			}
+			if (["eq", "neq", "in", "not.in", "like", "ilike"].includes(this.value)) {
+				var th = this.id.slice(0, -8);
+				var modalBody = document.getElementById(th + "Options");
+				var ele = document.createElement("row");
+				ele.setAttribute("id", "filterHint");
+				var txt = document.createElement("p");
+				txt.setAttribute("class", "form-text ps-1");
+				if (this.value == "in" || this.value == "not.in") {
+					txt.innerText = "condition must be a comma-separated list (no spaces)";
+				} else if (this.value == "like" || this.value == "ilike") {
+					txt.innerText = "use '%' to represent zero or more characters to match, otherwise the condition will be treated as a substring";
+				} else {
+					txt.innerText = "equals is used for literal comparison; to match NULL, use 'is' or 'is not'";
+				}
+				ele.appendChild(txt);
+				modalBody.appendChild(ele);
+			}
+		});
+	});
+</script>
 {% endif %}
-	{% block content %}
-	{{ default|safe }}
-	{% endblock %}
 {% if standalone %}
+</div>
 </body>
 </html>
 {% endif %}
