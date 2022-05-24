@@ -1,8 +1,5 @@
-import csv
-import os
 import requests
 
-from collections import defaultdict
 from lark.exceptions import UnexpectedInput
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.expression import bindparam

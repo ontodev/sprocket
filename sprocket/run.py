@@ -1,5 +1,4 @@
 import os
-import shutil
 
 from argparse import ArgumentParser
 from configparser import ConfigParser
