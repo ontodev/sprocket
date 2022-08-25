@@ -1,27 +1,65 @@
 {% extends "table.html" %}
 {% block subcontent %}
 
+<div class="row justify-content-end px-0 py-2">
+	<div class="col-auto">
+		<a class="btn btn-outline-primary" href="javascript:reset()">Reset</a>
+	</div>
+	<div class="col-auto">
+		<div class="btn-group">
+			<a href="javascript:violations('error')" class="btn btn-outline-primary bg-error">Error</a>
+			<a href="javascript:violations('warn')" class="btn btn-outline-primary bg-warn">Warning</a>
+			<a href="javascript:violations('info')" class="btn btn-outline-primary bg-info">Info</a>
+			<a href="javascript:violations('debug')" class="btn btn-outline-primary bg-debug">Debug</a>
+		</div>
+	</div>
+	<!-- Pagination -->
+	<div class="col-auto px-0">
+		<div class="btn-group">
+			{# rows are always defined for horizontal view, check that len is not 0 #}
+			{% set has_results = rows|length > 0 %}
+			{% if has_results and urls["prev"] %}
+				<a href="{{ urls['first'] }}" class="btn btn-outline-primary">first</a>
+				<a href="{{ urls['prev'] }}" class="btn btn-outline-primary">prev</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">first</a>
+				<a href="#" class="btn btn-outline-secondary disabled">prev</a>
+			{% endif %}
+
+			{% if not has_results %}
+			<!-- No results, disable button to change loc (nowhere to go) -->
+			<button type="button" class="btn btn-outline-secondary disabled">0 of 0</button>
+			{% else %}
+			<button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#updateLoc">
+				{% if limit == 1 %}
+				{{ offset + 1 }} of {{ total }}
+				{% else %}
+				<!-- length of rows (what is shown, may be less than limit) plus offset is the loc of last row -->
+				{{ offset + 1 }}-{{ rows|length + offset }} of {{ total }}
+				{% endif %}
+			</button>
+			{% endif %}
+
+			{% if has_results and urls["next"] %}
+				<a href="{{ urls['next'] }}" class="btn btn-outline-primary">next</a>
+				<a href="{{ urls['last'] }}" class="btn btn-outline-primary">last</a>
+			{% else %}
+				<a href="#" class="btn btn-outline-secondary disabled">next</a>
+				<a href="#" class="btn btn-outline-secondary disabled">last</a>
+			{% endif %}
+		</div>
+	</div>
+</div>
+
 <table class="table" id="sqlTableHorizontal">
 	<thead>
 		<tr>
-			{% if include_expand %} <th/> {% endif %}
+			{% if edit_link %} <th/> {% endif %}
 			{% for th in headers %}
-			{% if th != "rowid" %}
-			<th>
-				<div class="row justify-content-between">
-					<div class="col-auto">{{ th }}</div>
-					<div class="col-auto">
-						<div class="dropdown">
-							<button class="btn btn-light dropdown-toggle" type="button" id="{{ th }}Dropdown" data-bs-toggle="dropdown"> </button>
-							<ul class="dropdown-menu">
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', false)">Ascending</a></li>
-								<li><a class="dropdown-item" href="javascript:sort('{{ th }}', true)">Descending</a></li>
-							</ul>
-						</div>
-					</div>
-				</div>
+			{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
+			<th class="px-0">
+				<button id="{{ safe_header }}" type="button" class="btn btn-link fw-bold" style="text-decoration: none;" data-bs-toggle="modal" data-bs-target="#{{ safe_header }}Modal">{{ th }}</button>
 			</th>
-			{% endif %}
 			{% endfor %}
 		</tr>
 	</thead>
@@ -29,39 +67,111 @@
 		{% set vars = {'row_num': 0} %}
 		{% for row in rows %}
 		{% if vars.update({'row_num': vars.row_num + 1}) %} {% endif %}
-		<tr id="row{{ vars.row_num }}">
-			{% set inner_vars = {'cell_num': 0} %}
-			{% if include_expand %}
+		<tr id="row{{ vars.row_num }}" class="align-items-center">
+			<!-- Hidden elements to include in the row, e.g. custom row_number elements -->
+			{% if row["row_key"] %}
+			<td id="pk{{ vars.row_num }}" style="display: none;">{{ row["row_key"] }}</td>
+			{% if edit_link %}
+			<!-- Show a pencil button at the start of the row to switch to form for that row -->
 			<td>
-				<a class="btn btn-light sm-btn" type="button" id="vert{{ vars.row_num }}" href="javascript:vertical({{ vars.row_num }}, {{ offset }})"><p class="inner-btn">+</p></a>
+				<a class="btn btn-sm" href="{{ edit_link | replace('{row_id}', row['row_key']) }}"><i class="bi-pencil" style="color: #adb5bd;"></i></a>
 			</td>
 			{% endif %}
-			{% for itm in row %}
-			{% if itm["header"] != "rowid" %}
+			{% endif %}
+			<!-- Track the cell numbers within this row -->
+			{% set inner_vars = {'cell_num': 0} %}
+			{% for th in headers %}
+			{% set cell = row["cells"][th] %}
 			{% if inner_vars.update({'cell_num': inner_vars.cell_num + 1}) %} {% endif %}
-			{% if itm %}
-				{% if itm["style"] and itm["message"] %}
-					<td class="bg-{{ itm['style'] }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-html="true" data-bs-placement="bottom" title="{{ itm['message'] }}">
+			{% if cell %}
+				{% if cell["display"]|length > 100 and " " not in cell["display"].strip() %}
+					{% set extra_class = " long-word" %}
+				{% else %}
+					{% set extra_class = "" %}
+				{% endif %}
+				<!-- Each cell can have a style (in CSS) and a message (displayed as tooltip) -->
+				{% if cell["style"] and cell["message"] %}
+					{% if cell["message"]|length > 105 %}
+					{% set tooltip_msg = cell["message"][0:80] + "<br><i>... and more</i>" %}
+					{% else %}
+					{% set tooltip_msg = cell["message"] %}
+					{% endif %}
+					<td class="bg-{{ cell['style'] }}{{ extra_class }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ tooltip_msg|safe }}">
 						<div class="row justify-content-between">
-							<div class="col-auto">{{ itm["value"]|safe }}</div>
+							<div class="col-auto gy-1" id="value{{ vars.row_num }}-{{ inner_vars.cell_num }}">
+								{{ cell["display"]|safe }}
+							</div>
 							<div class="col-auto">
-								<a class="btn btn-light sm-btn" type="button" id="expand{{ vars.row_num }}" href="javascript:expand('{{ itm['style'].upper() }}', '{{ itm['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><p id="expandInner{{ vars.row_num }}" class="inner-btn">+</p></a>
+								<a class="btn btn-sm" id="expand{{ vars.row_num }}-{{ inner_vars.cell_num }}" href="javascript:expand('{{ cell['style'] }}', '{{ cell['message'] }}', {{ vars.row_num }}, {{ inner_vars.cell_num }})"><i class="bi-plus"></i></a>
 							</div>
 						</div>
 					</td>
-				{% elif itm["style"] %}
-					<td class="bg-{{ itm['style'] }}">{{ itm["value"]|safe }}</td>
+				{% elif cell["style"] %}
+					<td class="bg-{{ cell['style'] }}{{ extra_class }}">{{ cell["display"]|safe }}</td>
 				{% else %}
-					<td>{{ itm["value"]|safe }}</td>
+					<td class="{{ extra_class }}">{{ cell["display"]|safe }}</td>
 				{% endif %}
 			{% else %}
 			<td></td>
-			{% endif %}
 			{% endif %}
 			{% endfor %}
 		</tr>
 		{% endfor %}
 	</tbody>
 </table>
+
+{% for th in headers %}
+{% set safe_header = th | replace(' ', '_') | replace(':', '_') %}
+<div class="modal fade" id="{{ safe_header }}Modal" tabindex="-1">
+	<div class="modal-dialog">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h5 class="modal-title">{{ th }}</h5>
+				<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+			</div>
+			<div class="modal-body" id="{{ safe_header }}Options">
+				<div class="row justify-content-center">
+					<div class="btn-group">
+						<a href="javascript:sort('{{ th }}', 'asc')" class="btn btn-outline-primary">Sort A-Z</a>
+						<a href="javascript:sort('{{ th }}', 'desc')" class="btn btn-outline-primary">Sort Z-A</a>
+					</div>
+				</div>
+				<hr/>
+				<div class="row">
+					<a href="javascript:hide('{{ th }}')"><i class="bi-eye-slash"></i> Hide column</a>
+				</div>
+				<hr/>
+				{% if show_filters %}
+				<div class="row"><div class="col-auto pb-2">Filter by condition</div></div>
+				<div class="row">
+					{% set details = headers[th] %}
+					<div class="col-md-5">
+						<select class="form-select" id="{{ safe_header }}Operator" name="operator">
+							{% for val, optdetails in details.options.items() %}
+								{% if optdetails.selected %}
+								<option value="{{ val }}" selected>{{ optdetails.label }}</option>
+								{% else %}
+								<option value="{{ val }}">{{ optdetails.label }}</option>
+								{% endif %}
+							{% endfor %}
+						</select>
+					</div>
+					<div class="col-md-7">
+						{% if details.const %}
+						<input class="form-control" id="{{ safe_header }}Constraint" name="constraint" type="text" value="{{ details.const }}">
+						{% else %}
+						<input class="form-control" id="{{ safe_header }}Constraint" name="constraint" type="text">
+						{% endif %}
+					</div>
+				</div>
+				{% endif %}
+			</div>
+			<div class="modal-footer">
+        		<a type="button" class="btn btn-sm btn-primary" href="javascript:submitForm('{{ th }}')">Update</a>
+			</div>
+		</div>
+	</div>
+</div>
+{% endfor %}
 
 {% endblock %}

@@ -1,15 +1,15 @@
 import os
-import shutil
 
 from argparse import ArgumentParser
 from configparser import ConfigParser
-from flask import Flask, Blueprint, render_template
+from flask import abort, Flask, Blueprint, render_template, request
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 from typing import Optional
+from urllib.parse import urlparse
 from wsgiref.handlers import CGIHandler
 from .render import render_database_table, render_swagger_table
-from .lib import get_sql_tables, get_swagger_tables
+from .lib import get_sql_tables, get_swagger_tables, SprocketError
 
 BLUEPRINT = Blueprint(
     "sprocket",
@@ -20,8 +20,7 @@ BLUEPRINT = Blueprint(
 CONN = None  # type: Optional[Connection]
 DB = None  # type: Optional[str]
 DEFAULT_LIMIT = 100
-DEFAULT_TABLE = None
-SWAGGER_CACHE = ".swagger"
+DEFAULT_TABLE = None  # type: Optional[str]
 
 # TODO: select is not maintained when using a filter
 
@@ -29,7 +28,10 @@ SWAGGER_CACHE = ".swagger"
 @BLUEPRINT.route("/", methods=["GET"])
 def show_tables():
     if DEFAULT_TABLE:
-        return render_database_table(CONN, DEFAULT_TABLE)
+        try:
+            return render_database_table(CONN, DEFAULT_TABLE, request.args)
+        except SprocketError as e:
+            abort(422, str(e))
     if CONN:
         tables = get_sql_tables(CONN)
     else:
@@ -41,13 +43,26 @@ def show_tables():
 def get_table_by_name(table):
     if table == "favicon.ico":
         return render_template("test.html")
-    if CONN:
-        return render_database_table(CONN, table, default_limit=DEFAULT_LIMIT)
-    else:
-        return render_swagger_table(DB, table, default_limit=DEFAULT_LIMIT, swagger_cache=SWAGGER_CACHE)
+    try:
+        if CONN:
+            return render_database_table(CONN, table, request.args, default_limit=DEFAULT_LIMIT)
+        else:
+            return render_swagger_table(DB, table, request.args, default_limit=DEFAULT_LIMIT)
+    except SprocketError as e:
+        abort(422, str(e))
 
 
 def prepare(db, table=None, limit=None):
+    """Prepare the global vars for running sprocket:
+    - CONN: database connection created from DB (None when DB is a Swagger endpoint)
+    - DB: SQLite database file, Postgres config file, or Swagger endpoint URL
+    - DEFAULT_LIMIT: max number of results to display on a page when limit is not in query params
+    - DEFAULT_TABLE: table to redirect to from index page
+
+    :param db: SQLite database file, Postgres config file, or Swagger endpoint URL
+    :param table: table to set as DEFAULT_TABLE
+    :param limit: int to set as DEFAULT_LIMIT
+    """
     global CONN, DB, DEFAULT_LIMIT, DEFAULT_TABLE
     if limit:
         DEFAULT_LIMIT = limit
@@ -67,22 +82,22 @@ def prepare(db, table=None, limit=None):
             for param in config_parser.items("postgresql"):
                 params[param[0]] = param[1]
         else:
-            raise ValueError(
+            raise SprocketError(
                 "Unable to create database connection; missing [postgresql] section from " + DB
             )
         pg_user = params.get("user")
         if not pg_user:
-            raise ValueError(
+            raise SprocketError(
                 "Unable to create database connection: missing 'user' parameter from " + DB
             )
         pg_pw = params.get("password")
         if not pg_pw:
-            raise ValueError(
+            raise SprocketError(
                 "Unable to create database connection: missing 'password' parameter from " + DB
             )
         pg_db = params.get("database")
         if not pg_db:
-            raise ValueError(
+            raise SprocketError(
                 "Unable to create database connection: missing 'database' parameter from " + DB
             )
         pg_host = params.get("host", "127.0.0.1")
@@ -90,11 +105,12 @@ def prepare(db, table=None, limit=None):
         db_url = f"postgresql+psycopg2://{pg_user}:{pg_pw}@{pg_host}:{pg_port}/{pg_db}"
         engine = create_engine(db_url)
         CONN = engine.connect()
-    # TODO: error handling for invalid swagger URL
-    # else:
-    # raise ValueError(
-    # "Either a database file or a config file must be specified with a .db or .ini extension"
-    # )
+    else:
+        # Assume this is a Swagger endpoint, check that it is a well-formed URL
+        # (if it isn't an endpoint, sprocket will fail when we try to query)
+        res = urlparse(DB)
+        if not all([res.scheme, res.netloc]):
+            raise SprocketError("Unable to parse endpoint URL: " + DB)
 
 
 def main():
@@ -113,15 +129,10 @@ def main():
     app = Flask(__name__)
     app.register_blueprint(BLUEPRINT)
     app.url_map.strict_slashes = False
-    try:
-        if args.cgi:
-            CGIHandler().run(app)
-        else:
-            app.run()
-    finally:
-        # Remove our tracked data from Swagger
-        if not args.save_cache and os.path.exists(SWAGGER_CACHE):
-            shutil.rmtree(SWAGGER_CACHE)
+    if args.cgi:
+        CGIHandler().run(app)
+    else:
+        app.run()
 
 
 if __name__ == "__main__":
