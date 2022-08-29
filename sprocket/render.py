@@ -204,6 +204,7 @@ def render_database_table(
     tname = table
     if use_view:
         tname += "_view"
+
     results = exec_query(
         conn,
         tname,

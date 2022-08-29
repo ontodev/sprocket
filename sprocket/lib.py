@@ -79,6 +79,7 @@ def exec_query(
             query = query.bindparams(bindparam(k, expanding=True))
         else:
             query = query.bindparams(bindparam(k))
+
     return conn.execute(query, const_dict).fetchall()
 
 
@@ -108,12 +109,18 @@ def get_sql_tables(conn: Connection) -> List[str]:
     """
     if str(conn.engine.url).startswith("sqlite"):
         res = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '%_conflict';"
+            """SELECT name FROM sqlite_master
+            WHERE type='table'
+            AND name NOT LIKE '%_conflict'
+            ORDER BY table_name;"""
         )
     else:
         res = conn.execute(
             """SELECT table_name AS name FROM information_schema.tables
-            WHERE table_schema = 'public' AND table_name NOT LIKE '%_conflict';"""
+            WHERE table_schema = 'public'
+            AND table_type = 'BASE TABLE'
+            AND table_name NOT LIKE '%%_conflict'
+            ORDER BY table_name;"""
         )
     return [x["name"] for x in res]
 
