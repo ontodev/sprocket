@@ -112,7 +112,7 @@ def get_sql_tables(conn: Connection) -> List[str]:
             """SELECT name FROM sqlite_master
             WHERE type='table'
             AND name NOT LIKE '%_conflict'
-            ORDER BY table_name;"""
+            ORDER BY tbl_name;"""
         )
     else:
         res = conn.execute(
