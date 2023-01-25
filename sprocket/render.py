@@ -202,8 +202,8 @@ def render_database_table(
     if "row_number" in table_cols:
         query_cols.insert(0, "row_number")
     tname = table
-    if use_view:
-        tname += "_view"
+    #if use_view:
+    #    tname += "_view"
 
     results = exec_query(
         conn,
@@ -212,8 +212,13 @@ def render_database_table(
         select=query_cols,
         where_statements=where_statements,
         order_by=order_by,
+        limit=limit,
+        offset=offset,
         violations=violations,
     )
+    total = 0
+    if len(results) > 0 and "_total" in results[0]:
+        total = results[0]["_total"]
 
     # Return results based on format
     if fmt == "html":
@@ -221,6 +226,7 @@ def render_database_table(
             results,
             table,
             request_args,
+            total=total,
             base_url=base_url,
             columns=select_cols,
             default_limit=default_limit,
@@ -242,7 +248,8 @@ def render_database_table(
         mt = "text/comma-separated-values"
     writer = csv.writer(output, delimiter=sep, lineterminator="\n")
     writer.writerow(list(headers))
-    writer.writerows(list(results)[offset : limit + offset])
+    #writer.writerows(list(results)[offset : limit + offset])
+    writer.writerows(list(results))
     return Response(output.getvalue(), mimetype=mt)
 
 
@@ -357,12 +364,15 @@ def render_html_table(
                     continue
                 metadata = json.loads(meta)
 
-                if metadata.get("valid") and not metadata.get("nulltype"):
+                #if metadata.get("valid") and not metadata.get("nulltype"):
                     # Cell is not a null & is valid, nothing to style or change
-                    continue
+                #    continue
 
                 # This is the name of the column we are editing
                 value_col = m[:-5]
+                # WARN: These condition is a bit of a hack.
+                if "value" not in metadata:
+                    metadata["value"] = res[value_col]["value"]
                 # Set the value to what is given in the JSON (as "value")
                 # unless there is a primary key conflict, in which case use conflict format
                 pk_value = None
@@ -395,6 +405,15 @@ def render_html_table(
                             violation_level = 1
                         elif lvl == "debug" and violation_level < 1:
                             violation_level = 0
+                if "updates" in metadata:
+                    msg = f"""ORIGINAL VALUE: {metadata["updates"][0]["value"]}"""
+                    messages.append(msg)
+                    for u in metadata["updates"][1:]:
+                        value = metadata["value"]
+                        if "value" in u:
+                            value = u["value"]
+                        msg = f"""UPDATED to '{value}' at {u["datetime"]} by {u["user"]}: {u["comment"]}"""
+                        messages.append(msg)
 
                 # Set cell style based on violation level
                 if violation_level == 0:
@@ -405,24 +424,28 @@ def render_html_table(
                     res[value_col]["style"] = "warn"
                 elif violation_level == 3:
                     res[value_col]["style"] = "error"
+                elif "updates" in metadata:
+                    res[value_col]["style"] = "success"
 
                 # Join multiple messages with line breaks
                 if len(messages) > 1:
                     messages = [f"({i}) {msg}" for i, msg in enumerate(messages, 1)]
                 res[value_col]["message"] = "<br>".join(messages).replace('"', "&quot;")
+
+
             res_updated.append(res)
         results = res_updated
     elif hide_meta:
         header_names = [x for x in header_names if not x.endswith("_meta")]
 
-    offset = int(request_args.get("offset", "0"))
     limit = int(request_args.get("limit", default_limit))
+    offset = int(request_args.get("offset", "0"))
 
     if not total:
         total = len(results)
         if total < offset:
             offset = 0
-        results = list(results)[offset : limit + offset]
+        results = list(results)
 
     # Set the options for filtering - only if we're showing options
     headers = {}

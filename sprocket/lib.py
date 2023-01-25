@@ -15,6 +15,8 @@ def exec_query(
     select: List[str] = None,
     where_statements: List[Tuple] = None,
     order_by: List[str] = None,
+    limit: str = None,
+    offset: str = None,
     violations: List[str] = None,
 ) -> List[dict]:
     """
@@ -30,7 +32,8 @@ def exec_query(
     """
     if not select:
         select = ["*"]
-    query = "SELECT "
+    #query = "SELECT "
+    query = "SELECT COUNT(*) OVER() AS _total, "
     select_strs = []
     for s in select:
         if s == "*":
@@ -72,6 +75,11 @@ def exec_query(
         query += " OR ".join(meta_filters)
     if order_by:
         query += " ORDER BY " + ", ".join(order_by)
+    if limit:
+        query += " LIMIT 100"
+    if offset:
+        query += " OFFSET 0"
+    print(query)
 
     query = sql_text(query)
     for k, v in const_dict.items():

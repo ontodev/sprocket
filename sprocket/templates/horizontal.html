@@ -92,9 +92,9 @@
 				<!-- Each cell can have a style (in CSS) and a message (displayed as tooltip) -->
 				{% if cell["style"] and cell["message"] %}
 					{% if cell["message"]|length > 105 %}
-					{% set tooltip_msg = cell["message"][0:80] + "<br><i>... and more</i>" %}
+					{% set tooltip_msg = cell["message"][0:80] + "<br><i>... and more</i>" | safe %}
 					{% else %}
-					{% set tooltip_msg = cell["message"] %}
+					{% set tooltip_msg = cell["message"] | safe %}
 					{% endif %}
 					<td class="bg-{{ cell['style'] }}{{ extra_class }}" id="td{{ vars.row_num }}-{{ inner_vars.cell_num }}" data-bs-toggle="tooltip" data-bs-html="true" data-bs-placement="bottom" title="{{ tooltip_msg|safe }}">
 						<div class="row justify-content-between">
